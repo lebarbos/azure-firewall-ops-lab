@@ -1,0 +1,40 @@
+# Estado local do lab (região/SKU escolhidos pelo preflight). Nunca contém segredo, mas é por máquina.
+.lab/
+
+# Pacotes gerados por scripts/package.sh
+*.zip
+dist/
+
+# ARM JSON gerado por `az bicep build`
+infra/main.json
+infra/modules/*.json
+
+# Material fora da distribuição do aluno
+/INSTRUCTOR.md
+/demo/
+/apresentacao/
+snapshots/
+/Ajustes.md
+*.pptx
+*.pdf
+
+# Lista de padrões de neutralidade: vive FORA do repo (~/.config/fwlab/neutral-patterns.txt)
+neutral-patterns.txt
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Node / Playwright (validação local)
+node_modules/
+playwright-report/
+test-results/
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

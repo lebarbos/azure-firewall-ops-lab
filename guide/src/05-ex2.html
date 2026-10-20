@@ -1,0 +1,648 @@
+<section class="chapter" id="ex2" data-title="Ex2 · Precedência das regras">
+  <h2>Ex2 · Precedência das regras</h2>
+  <p class="meta">⏱ 50 min · Checkpoint C2</p>
+
+  <p>Quando duas regras se contradizem, uma liberando e outra bloqueando, qual o firewall obedece? Neste exercício você prova a resposta com previsão e log. O firewall não lê as regras como uma lista única: ele faz <strong>uma passada por tipo</strong>, primeiro todas as <strong>Network</strong> rules e depois todas as <strong>Application</strong> rules. Dentro de cada passada, conta a prioridade do <strong>Rule Collection Group</strong> e, dentro do RCG, a da <strong>Rule Collection</strong>. O primeiro match encerra a avaliação.</p>
+
+  <div class="callout warn">
+    <p class="callout-title">Antes de começar</p>
+    <p>O Ex1 precisa estar concluído: IP Groups criados e <code>{{c.rcg.baselineNs.name}}</code> na policy <code>{{c.names.polNs}}</code>.</p>
+  </div>
+
+  <h3 id="ex2-layout" data-nav="Layout do Ex2">Layout que você vai montar</h3>
+  <p>A ideia: os <strong>bloqueios</strong> ficam no RCG de número melhor (<code>{{c.rcg.wlA.name}}</code>, {{c.rcg.wlA.priority}}) e as <strong>liberações</strong> no de número pior (<code>{{c.rcg.wlB.name}}</code>, {{c.rcg.wlB.priority}}). Pelo número, os bloqueios deveriam sempre ganhar; os experimentos mostram quando isso não acontece.</p>
+  {{svg:layout-ex2}}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>RCG</th>
+        <th>Collections (tipo, prioridade, ação)</th>
+        <th>Quando entra</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>{{c.rcg.wlA.priority}}</strong> · <code>{{c.rcg.wlA.name}}</code></td>
+        <td><code>{{c.rc.appWlA.name}}</code> (Application, {{c.rc.appWlA.priority}}, Deny): <code>{{c.rules.denyLearn}}</code> de <code>{{c.names.ipgWlA}}</code> para {{c.targets.learn}} e <code>{{c.rules.denyBing}}</code> de <code>{{c.names.ipgSpokes}}</code> (A e B) para {{c.targets.bing}}</td>
+        <td>2.1</td>
+      </tr>
+      <tr>
+        <td><strong>{{c.rcg.wlB.priority}}</strong> · <code>{{c.rcg.wlB.name}}</code></td>
+        <td>Criado no início do E2. Collections: <code>{{c.rc.appWlBAllow.name}}</code> (Application, {{c.rc.appWlBAllow.priority}}, Allow {{c.targets.learn}} para A e B) · <code>{{c.rc.netWlBTemp.name}}</code> (Network, {{c.rc.netWlBTemp.priority}}, Allow TCP 443 para B) · <code>{{c.rc.appWlBDeny.name}}</code> (Application, {{c.rc.appWlBDeny.priority}}, Deny {{c.targets.learn}} para B)</td>
+        <td>E2 · E3 · E4</td>
+      </tr>
+      <tr>
+        <td><strong>{{c.rcg.baselineNs.priority}}</strong> · <code>{{c.rcg.baselineNs.name}}</code></td>
+        <td><code>{{c.rc.appBaseline.name}}</code> (Application, {{c.rc.appBaseline.priority}}, Allow) para <code>{{c.targets.baselineFqdn}}</code></td>
+        <td>Ex1</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <article class="step" id="ex2-1" data-nav="2.1 RCG dos bloqueios">
+    <h3>2.1 · Criar o RCG {{c.rcg.wlA.name}} (os bloqueios)</h3>
+    <p class="what"><strong>O que:</strong> crie o RCG <code>{{c.rcg.wlA.name}}</code> com uma collection de Application Deny e duas regras.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> este RCG tem o número melhor do exercício ({{c.rcg.wlA.priority}}). Ele guarda os bloqueios que os experimentos vão tentar contornar: {{c.targets.learn}} só para a VM-A e {{c.targets.bing}} para as duas VMs.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <div class="callout warn">
+        <p class="callout-title">Uma alteração por vez: espere a anterior terminar</p>
+        <p>Cada <span class="ui">Add</span> atualiza a policy inteira e leva alguns minutos. Enquanto o grupo ou a collection anterior ainda estiver sendo criado, <strong>não abra o próximo formulário</strong>. Antes de cada <span class="ui">+ Add</span>, clique em <span class="ui">Refresh</span> em <span class="ui">Rule collections</span> e confirme, em <span class="path">{{c.names.polNs}} › Overview</span>, que o <span class="ui">Provisioning state</span> é <span class="ui">Succeeded</span>.</p>
+        <p>Se aparecer <em>"The firewall policy has been modified since first loading this page. Please refresh to get the latest updates."</em>, o formulário foi aberto antes da alteração anterior terminar. Feche o formulário, espere <span class="ui">Succeeded</span>, clique em <span class="ui">Refresh</span> e preencha de novo.</p>
+      </div>
+      <ol>
+        <li>Abra <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span>.</li>
+        <li><strong>Grupo.</strong> Clique em <span class="ui">+ Add › Rule collection group</span> e preencha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rcg.wlA.name}}</code></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rcg.wlA.priority}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li><strong>Collection.</strong> Clique em <span class="ui">+ Add › Rule collection</span> e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.appWlA.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.appWlA.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Deny</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.wlA.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha duas linhas.
+          <p><strong>Linha 1</strong> (bloqueia o Learn só para a VM-A):</p>
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.denyLearn}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgWlA}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Http:80,Https:443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">FQDN</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.learn}}</code></li>
+          </ul>
+          <p><strong>Linha 2</strong> (bloqueia o Bing para as duas VMs):</p>
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.denyBing}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgSpokes}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Http:80,Https:443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">FQDN</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.bing}}</code></li>
+          </ul>
+          Deixe <span class="ui">TLS inspection</span> desmarcado. Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li>Clique em <span class="ui">Refresh</span> e confira <code>{{c.rc.appWlA.name}}</code> sob <code>{{c.rcg.wlA.name}}</code>, com duas regras.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>RG={{c.names.rg}}
+POL={{c.names.polNs}}
+IPG_WL_A_ID=$(az network ip-group show -g "$RG" -n {{c.names.ipgWlA}} --query id -o tsv)
+IPG_SPOKES_ID=$(az network ip-group show -g "$RG" -n {{c.names.ipgSpokes}} --query id -o tsv)
+
+wait_rcg() {
+  local rcg="$1"
+  until [ "$(az network firewall policy rule-collection-group show -g "$RG" --policy-name "$POL" -n "$rcg" --query provisioningState -o tsv)" = "Succeeded" ]; do
+    sleep 20
+  done
+  sleep 90
+}
+
+az network firewall policy rule-collection-group create \
+  -g "$RG" --policy-name "$POL" \
+  -n {{c.rcg.wlA.name}} \
+  --priority {{c.rcg.wlA.priority}} \
+  -o none
+wait_rcg {{c.rcg.wlA.name}}
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlA.name}} \
+  -n {{c.rc.appWlA.name}} --collection-priority {{c.rc.appWlA.priority}} --action Deny \
+  --rule-name {{c.rules.denyLearn}} --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_WL_A_ID" --protocols Http=80 Https=443 \
+  --target-fqdns {{c.targets.learn}} \
+  -o none
+wait_rcg {{c.rcg.wlA.name}}
+
+az network firewall policy rule-collection-group collection rule add \
+  -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlA.name}} \
+  --collection-name {{c.rc.appWlA.name}} \
+  -n {{c.rules.denyBing}} --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_SPOKES_ID" --protocols Http=80 Https=443 \
+  --target-fqdns {{c.targets.bing}} \
+  -o none
+wait_rcg {{c.rcg.wlA.name}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> <code>{{c.rcg.wlA.name}}</code> fica em prioridade <code>{{c.rcg.wlA.priority}}</code> com <code>{{c.rc.appWlA.name}}</code>; <code>{{c.rules.denyLearn}}</code> tem origem <code>{{c.names.ipgWlA}}</code> e <code>{{c.rules.denyBing}}</code> tem origem <code>{{c.names.ipgSpokes}}</code>.</p>
+    </div>
+  </article>
+
+  <div class="callout tip">
+    <p class="callout-title">Teste nas duas VMs e anote a diferença</p>
+    <p>Com o RCG criado, espere a policy voltar a <span class="ui">Succeeded</span> e mais 1 a 2 minutos para propagação. Depois:</p>
+    <ol>
+      <li>Conecte na <strong>VM-A</strong> pelo Bastion, abra o PowerShell e rode o script abaixo.</li>
+      <li>Conecte na <strong>VM-B</strong> e rode o mesmo script.</li>
+      <li>Anote, para cada VM e cada site, se abriu (código <code>200</code>) ou deu erro. Compare as duas VMs: o que mudou de uma para a outra? No E1 você descobre por quê.</li>
+    </ol>
+    <pre class="code" data-lang="powershell"><code>foreach ($site in "https://{{c.targets.learn}}", "https://{{c.targets.bing}}") {
+  try { "$site -> " + (Invoke-WebRequest -Uri $site -UseBasicParsing -TimeoutSec 20).StatusCode }
+  catch { "$site -> ERRO: " + $_.Exception.Message }
+}</code></pre>
+    <p><strong>Opcional: sem abrir o Bastion, pelo Run command.</strong> O tráfego sai da própria VM, então o firewall avalia do mesmo jeito.</p>
+    <ol>
+      <li>Abra <span class="path">Virtual machines › {{c.names.vmA}} › Operations › Run command</span> e escolha <span class="ui">RunPowerShellScript</span>.</li>
+      <li>Cole o mesmo script, clique em <span class="ui">Run</span> e espere o resultado em <span class="ui">Output</span>.</li>
+      <li>Repita em <span class="path">{{c.names.vmB}} › Operations › Run command</span>. Pode abrir as duas VMs em abas lado a lado.</li>
+    </ol>
+    <p>Limites do Run command: roda um script por vez em cada VM, leva no mínimo cerca de 20 segundos, não pode ser cancelado e mostra só os últimos 4.096 bytes da saída. Por isso o script imprime só o código ou o erro de cada site. Se o resultado não voltar, use o Bastion. Referência: <a href="https://learn.microsoft.com/azure/virtual-machines/windows/run-command#restrictions" target="_blank" rel="noopener">Run Command no Windows</a>.</p>
+    <p>Use o mesmo script, pelo Bastion ou pelo Run command, em todos os testes dos experimentos. Antes de cada teste, espere a policy voltar a <span class="ui">Succeeded</span> e mais 1 a 2 minutos.</p>
+  </div>
+
+  <article class="step" id="ex2-e1" data-nav="E1 · Leia o resultado">
+    <h3>E1 · Leia o resultado: qual regra decidiu e em que ordem</h3>
+    <p class="what"><strong>O que:</strong> com o resultado do teste que você acabou de fazer nas VMs, descubra qual regra decidiu cada acesso e em que ordem o firewall leu as regras.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o firewall não lê as regras como uma lista única. Ele dá uma volta por tipo: primeiro todas as <strong>Network</strong>, depois todas as <strong>Application</strong>. Dentro de cada volta, segue o número do grupo (RCG) e, dentro do grupo, o da collection. A primeira regra que casa decide. Entender esta ordem no estado atual é a base para prever os próximos experimentos.</p>
+    </div>
+    <h4>Resultado do teste</h4>
+    <table class="data">
+      <thead>
+        <tr><th>VM</th><th>Site</th><th>Resultado</th><th>Quem decidiu (RCG / collection / regra)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>VM-A</td><td>{{c.targets.learn}}</td><td>❌ negado</td><td><code>{{c.rcg.wlA.name}}</code> / <code>{{c.rc.appWlA.name}}</code> / <code>{{c.rules.denyLearn}}</code></td></tr>
+        <tr><td>VM-B</td><td>{{c.targets.learn}}</td><td>✅ permitido</td><td><code>{{c.rcg.baselineNs.name}}</code> / <code>{{c.rc.appBaseline.name}}</code> / <code>{{c.rules.allowMicrosoft}}</code></td></tr>
+        <tr><td>VM-A</td><td>{{c.targets.bing}}</td><td>❌ negado</td><td><code>{{c.rcg.wlA.name}}</code> / <code>{{c.rc.appWlA.name}}</code> / <code>{{c.rules.denyBing}}</code></td></tr>
+        <tr><td>VM-B</td><td>{{c.targets.bing}}</td><td>❌ negado</td><td><code>{{c.rcg.wlA.name}}</code> / <code>{{c.rc.appWlA.name}}</code> / <code>{{c.rules.denyBing}}</code></td></tr>
+      </tbody>
+    </table>
+    <h4>Ordem de processamento</h4>
+    {{svg:ordem-ex2}}
+    <ol>
+      <li><strong>Volta Network:</strong> vazia. Ainda não existe nenhuma collection Network em <code>{{c.names.polNs}}</code>, então nada decide aqui.</li>
+      <li><strong>Volta Application</strong>, pelo número do grupo:
+        <ul>
+          <li><code>{{c.rcg.infrastructure.name}}</code> ({{c.rcg.infrastructure.priority}}): só libera Azure Storage. Não casa com Learn nem Bing; segue.</li>
+          <li><code>{{c.rcg.wlA.name}}</code> ({{c.rcg.wlA.priority}}): <code>{{c.rules.denyLearn}}</code> casa só para a VM-A, e <code>{{c.rules.denyBing}}</code> casa para as duas. Quando casa, nega e <strong>para aqui</strong>.</li>
+          <li><code>{{c.rcg.baselineNs.name}}</code> ({{c.rcg.baselineNs.priority}}): só é lido por quem não foi decidido antes. A VM-B pedindo o Learn chega aqui e é liberada por <code>{{c.targets.baselineFqdn}}</code>.</li>
+        </ul>
+      </li>
+      <li>Se nada casar em nenhuma volta, o firewall nega no <strong>deny implícito</strong>.</li>
+    </ol>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">{{c.names.law}} › Logs</span> e rode a consulta abaixo.</li>
+        <li>Para cada linha, compare as colunas <code>RuleCollectionGroup</code>, <code>RuleCollection</code> e <code>Rule</code> com a tabela acima.</li>
+      </ol>
+      {{kql:ex2-precedencia}}
+    </div>
+    <p class="no-cli">Sem passo de CLI: a consulta acima roda no Log Analytics.</p>
+    <div class="verify">
+      <p><strong>Verifique:</strong> para cada um dos quatro acessos, você sabe apontar no log a regra que decidiu e explicar por que a VM-B chega até o baseline no Learn, mas não no Bing.</p>
+    </div>
+  </article>
+
+  <article class="experiment" id="ex2-e2" data-nav="E2 · Grupos diferentes">
+    <h3>E2 · Mesmo tipo, grupos diferentes: o número do grupo decide</h3>
+    <p>Duas regras Application em grupos diferentes. Quem é lido primeiro: o grupo de número menor ou a collection de número menor?</p>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>Responda antes de testar. Você vai criar um grupo novo, <code>{{c.rcg.wlB.name}}</code> (prioridade {{c.rcg.wlB.priority}}), com a collection <code>{{c.rc.appWlBAllow.name}}</code>: um Allow de {{c.targets.learn}} para as duas VMs, com número de collection <code>{{c.rc.appWlBAllow.priority}}</code>, melhor que o <code>{{c.rc.appWlA.priority}}</code> do Deny. (1) Em que ponto da ordem do E1 esse grupo entra? (2) A VM-A passa a acessar o Learn? (3) E se <code>{{c.rcg.wlB.name}}</code> mudar para <code>{{c.rcg.wlB.e2Priority}}</code>?</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Crie o grupo das liberações.</strong> Em <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span>, clique em <span class="ui">+ Add › Rule collection group</span> e preencha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rcg.wlB.name}}</code></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rcg.wlB.priority}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>. Sozinho, o grupo não muda nada no tráfego: ele só passa a existir para receber a collection do próximo passo.</li>
+        <li><strong>Crie o Allow dentro dele.</strong> Clique em <span class="ui">Refresh</span>, depois em <span class="ui">+ Add › Rule collection</span>, e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.appWlBAllow.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.appWlBAllow.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Allow</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.wlB.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.allowLearn}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgSpokes}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Http:80,Https:443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">FQDN</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.learn}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span>, espere <span class="ui">Succeeded</span> e mais 1 a 2 minutos.</li>
+        <li>Teste {{c.targets.learn}} de novo a partir da VM-A.</li>
+        <li><strong>Troque a prioridade do RCG pelo Cloud Shell.</strong> No Portal, o <span class="ui">Edit</span> do grupo fica desabilitado: a prioridade de um RCG não se altera por ali. Abra o Cloud Shell e rode:
+          <pre class="code" data-lang="bash"><code>az network firewall policy rule-collection-group update \
+  -g {{c.names.rg}} --policy-name {{c.names.polNs}} \
+  -n {{c.rcg.wlB.name}} --priority {{c.rcg.wlB.e2Priority}} -o none</code></pre>
+          Volte ao Portal, clique em <span class="ui">Refresh</span> e confira <code>{{c.rcg.wlB.name}}</code> com prioridade <code>{{c.rcg.wlB.e2Priority}}</code>, agora acima de <code>{{c.rcg.wlA.name}}</code> na lista. Espere <span class="ui">Succeeded</span>, mais 1 a 2 minutos, e teste de novo a partir da VM-A.</li>
+        <li><strong>Obrigatório:</strong> volte o grupo para <code>{{c.rcg.wlB.priority}}</code>, também pelo Cloud Shell, e espere <span class="ui">Succeeded</span>. Mantenha <code>{{c.rc.appWlBAllow.name}}</code>: ela é usada no E4 e no C2.
+          <pre class="code" data-lang="bash"><code>az network firewall policy rule-collection-group update \
+  -g {{c.names.rg}} --policy-name {{c.names.polNs}} \
+  -n {{c.rcg.wlB.name}} --priority {{c.rcg.wlB.priority}} -o none</code></pre>
+        </li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>RG={{c.names.rg}}
+POL={{c.names.polNs}}
+IPG_SPOKES_ID=$(az network ip-group show -g "$RG" -n {{c.names.ipgSpokes}} --query id -o tsv)
+
+wait_rcg() {
+  local rcg="$1"
+  until [ "$(az network firewall policy rule-collection-group show -g "$RG" --policy-name "$POL" -n "$rcg" --query provisioningState -o tsv)" = "Succeeded" ]; do
+    sleep 20
+  done
+  sleep 90
+}
+
+test_learn() {
+  for VM in "$@"; do
+    echo "== $VM =="
+    az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript \
+      --scripts 'try { Invoke-WebRequest -Uri https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 20 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }' \
+      --query "value[0].message" -o tsv
+  done
+}
+
+az network firewall policy rule-collection-group create \
+  -g "$RG" --policy-name "$POL" \
+  -n {{c.rcg.wlB.name}} \
+  --priority {{c.rcg.wlB.priority}} \
+  -o none
+wait_rcg {{c.rcg.wlB.name}}
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlB.name}} \
+  -n {{c.rc.appWlBAllow.name}} --collection-priority {{c.rc.appWlBAllow.priority}} --action Allow \
+  --rule-name {{c.rules.allowLearn}} --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_SPOKES_ID" --protocols Http=80 Https=443 \
+  --target-fqdns {{c.targets.learn}} \
+  -o none
+wait_rcg {{c.rcg.wlB.name}}
+
+echo "Allow criado, {{c.rcg.wlB.name}} em {{c.rcg.wlB.priority}}"
+test_learn {{c.names.vmA}}
+
+az network firewall policy rule-collection-group update \
+  -g "$RG" --policy-name "$POL" -n {{c.rcg.wlB.name}} \
+  --priority {{c.rcg.wlB.e2Priority}} \
+  -o none
+wait_rcg {{c.rcg.wlB.name}}
+
+echo "{{c.rcg.wlB.name}} em {{c.rcg.wlB.e2Priority}}"
+test_learn {{c.names.vmA}}
+
+az network firewall policy rule-collection-group update \
+  -g "$RG" --policy-name "$POL" -n {{c.rcg.wlB.name}} \
+  --priority {{c.rcg.wlB.priority}} \
+  -o none
+wait_rcg {{c.rcg.wlB.name}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> onde você colocou o novo grupo na ordem, o resultado da VM-A com o Allow criado e o resultado da VM-A com <code>{{c.rcg.wlB.name}}</code> em <code>{{c.rcg.wlB.e2Priority}}</code>. Só então abra a resposta.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p><strong>Resultado esperado:</strong> o novo grupo entra entre <code>{{c.rcg.wlA.name}}</code> e o baseline; a VM-A só passa quando o grupo vai para {{c.rcg.wlB.e2Priority}}.</p>
+      <table class="data">
+        <thead>
+          <tr><th>Situação</th><th>Ordem de leitura (volta Application)</th><th>VM-A no Learn</th><th>Por quê</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>{{c.rcg.wlB.name}}</code> em <strong>{{c.rcg.wlB.priority}}</strong></td><td>infra ({{c.rcg.infrastructure.priority}}) → <strong>wl-a ({{c.rcg.wlA.priority}})</strong> → wl-b ({{c.rcg.wlB.priority}}) → baseline ({{c.rcg.baselineNs.priority}})</td><td>❌ negada</td><td>O <strong>Deny</strong> de <code>{{c.rcg.wlA.name}}</code> é lido primeiro e decide. O Allow nem é lido.</td></tr>
+          <tr><td><code>{{c.rcg.wlB.name}}</code> em <strong>{{c.rcg.wlB.e2Priority}}</strong></td><td>infra ({{c.rcg.infrastructure.priority}}) → <strong>wl-b ({{c.rcg.wlB.e2Priority}})</strong> → wl-a ({{c.rcg.wlA.priority}}) → baseline ({{c.rcg.baselineNs.priority}})</td><td>✅ permitida</td><td>Agora o <strong>Allow</strong> de <code>{{c.rcg.wlB.name}}</code> é lido primeiro e decide. O Deny nem é lido.</td></tr>
+        </tbody>
+      </table>
+      <p><strong>A pegadinha:</strong> o Allow tem número de collection melhor (<code>{{c.rc.appWlBAllow.priority}}</code>) que o Deny (<code>{{c.rc.appWlA.priority}}</code>), e mesmo assim perde enquanto o grupo dele é {{c.rcg.wlB.priority}}. O número da collection só serve para ordenar collections <strong>dentro do mesmo grupo</strong>. Entre grupos diferentes, quem manda é o número do grupo.</p>
+      <p><strong>Em uma frase:</strong> a regra e o número da collection não mudaram; só o número do grupo mudou, e o resultado virou.</p>
+      {{kql:ex2-precedencia}}
+    </details>
+  </article>
+
+  <article class="experiment" id="ex2-e3" data-nav="E3 · Tipos diferentes">
+    <h3>E3 · Tipos diferentes: o tipo decide</h3>
+    <p>Uma regra Network num grupo de número <strong>pior</strong> contra uma regra Application num grupo de número <strong>melhor</strong>. O número do grupo ainda manda?</p>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>O Deny <code>{{c.rules.denyBing}}</code> (Application) bloqueia {{c.targets.bing}} para A e B no RCG <code>{{c.rcg.wlA.name}}</code>, de número <strong>melhor</strong> ({{c.rcg.wlA.priority}}). Você vai criar, no RCG <code>{{c.rcg.wlB.name}}</code>, de número <strong>pior</strong> ({{c.rcg.wlB.priority}}), uma network rule que libera TCP 443 só para a VM-B. A VM-B acessa {{c.targets.bing}}? E a VM-A?</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Teste inicial.</strong> Nas VMs A e B, rode <code>Invoke-WebRequest -Uri https://{{c.targets.bing}} -UseBasicParsing</code>. As duas devem falhar.</li>
+        <li><strong>Crie a network rule temporária.</strong> Em <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span>, clique em <span class="ui">+ Add › Rule collection</span> e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.netWlBTemp.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Network</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.netWlBTemp.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Allow</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.wlB.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.allowHttpsAny}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgWlB}}</code></li>
+            <li><span class="ui">Protocol</span>: <span class="ui">TCP</span></li>
+            <li><span class="ui">Destination Ports</span>: <code>443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">IP Address</span></li>
+            <li><span class="ui">Destination</span>: <code>*</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span>, espere <span class="ui">Succeeded</span> e mais 1 a 2 minutos.</li>
+        <li>Teste {{c.targets.bing}} de novo nas VMs A e B.</li>
+        <li><strong>Obrigatório:</strong> na lista de <span class="ui">Rule collections</span>, marque <code>{{c.rc.netWlBTemp.name}}</code>, clique em <span class="ui">Delete</span>, confirme e espere <span class="ui">Succeeded</span>.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>RG={{c.names.rg}}
+POL={{c.names.polNs}}
+IPG_WL_B_ID=$(az network ip-group show -g "$RG" -n {{c.names.ipgWlB}} --query id -o tsv)
+
+wait_rcg() {
+  local rcg="$1"
+  until [ "$(az network firewall policy rule-collection-group show -g "$RG" --policy-name "$POL" -n "$rcg" --query provisioningState -o tsv)" = "Succeeded" ]; do
+    sleep 20
+  done
+  sleep 90
+}
+
+test_bing() {
+  for VM in "$@"; do
+    echo "== $VM =="
+    az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript \
+      --scripts 'try { Invoke-WebRequest -Uri https://{{c.targets.bing}} -UseBasicParsing -TimeoutSec 20 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }' \
+      --query "value[0].message" -o tsv
+  done
+}
+
+echo "Antes da network rule"
+test_bing {{c.names.vmA}} {{c.names.vmB}}
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlB.name}} \
+  -n {{c.rc.netWlBTemp.name}} --collection-priority {{c.rc.netWlBTemp.priority}} --action Allow \
+  --rule-name {{c.rules.allowHttpsAny}} --rule-type NetworkRule --ip-protocols TCP \
+  --source-ip-groups "$IPG_WL_B_ID" \
+  --destination-addresses '*' --destination-ports 443 \
+  -o none
+wait_rcg {{c.rcg.wlB.name}}
+
+echo "Com {{c.rc.netWlBTemp.name}}"
+test_bing {{c.names.vmA}} {{c.names.vmB}}
+
+az network firewall policy rule-collection-group collection remove \
+  -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlB.name}} \
+  -n {{c.rc.netWlBTemp.name}} \
+  -o none
+wait_rcg {{c.rcg.wlB.name}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> o resultado de A e B antes e depois da network rule e a tabela de log em que aparece a decisão de B. Só então abra a resposta.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p><strong>Resultado esperado:</strong> antes, as duas VMs são negadas no Bing; com a network rule, a VM-B passa e a VM-A continua negada.</p>
+      <table class="data">
+        <thead>
+          <tr><th>Situação</th><th>Ordem de leitura</th><th>VM-A no Bing</th><th>VM-B no Bing</th><th>Por quê</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Antes</strong> da network rule</td><td>Network: vazia<br>Application: infra ({{c.rcg.infrastructure.priority}}) → <strong>wl-a ({{c.rcg.wlA.priority}})</strong> → wl-b ({{c.rcg.wlB.priority}}) → baseline ({{c.rcg.baselineNs.priority}})</td><td>❌ negada</td><td>❌ negada</td><td>Nada decide na volta Network. Na volta Application, o <strong>Deny</strong> <code>{{c.rules.denyBing}}</code> de <code>{{c.rcg.wlA.name}}</code> decide para as duas.</td></tr>
+          <tr><td><strong>Com</strong> <code>{{c.rc.netWlBTemp.name}}</code></td><td>Network: <strong>wl-b ({{c.rcg.wlB.priority}}) / {{c.rc.netWlBTemp.name}}</strong><br>Application: infra → wl-a → wl-b → baseline</td><td>❌ negada</td><td>✅ permitida</td><td>Para a VM-B, a network rule casa na volta Network e encerra a avaliação: a volta Application nem começa. A VM-A não está em <code>{{c.names.ipgWlB}}</code>, passa direto pela volta Network e é negada na Application.</td></tr>
+        </tbody>
+      </table>
+      <p><strong>A pegadinha:</strong> o Deny está no grupo de número <strong>melhor</strong> ({{c.rcg.wlA.priority}}) e a liberação no de número <strong>pior</strong> ({{c.rcg.wlB.priority}}). Mesmo assim, a liberação vence, porque é de outro <strong>tipo</strong>: a volta Network acontece inteira antes da volta Application, em todos os grupos.</p>
+      <p><strong>No log:</strong> a decisão da VM-B aparece só em <code>AZFWNetworkRule</code>, em <code>{{c.rcg.wlB.name}}/{{c.rc.netWlBTemp.name}}/{{c.rules.allowHttpsAny}}</code>. Não há linha de <code>AZFWApplicationRule</code> para ela.</p>
+      <p><strong>Em uma frase:</strong> o número do grupo só ordena dentro da mesma volta; uma regra Network vence uma Application, qualquer que seja o número do grupo.</p>
+      <p><strong>Risco de produção:</strong> uma network rule ampla, como TCP 443 para qualquer destino, contorna controles de FQDN, URL e categoria, mesmo que eles estejam num RCG "mais prioritário". Em produção, use escopo mínimo e valide pelos logs antes da mudança.</p>
+      {{kql:ex2-tipo}}
+    </details>
+    <div class="callout warn">
+      <p class="callout-title">Antes de seguir: remova a <code>{{c.rc.netWlBTemp.name}}</code></p>
+      <p>Enquanto ela existir, a VM-B tem a porta 443 liberada na volta Network, <strong>antes</strong> de qualquer regra Application. O E4 depende de regras Application para a VM-B e daria um resultado falso, e o Checkpoint C2 falha com ela na policy.</p>
+      <ol>
+        <li>Em <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span>, abra o menu <span class="ui">…</span> da linha <code>{{c.rc.netWlBTemp.name}}</code>, clique em <span class="ui">Delete</span> e confirme.</li>
+        <li>Espere <span class="ui">Succeeded</span>, clique em <span class="ui">Refresh</span> e confira: dentro de <code>{{c.rcg.wlB.name}}</code> sobra só <code>{{c.rc.appWlBAllow.name}}</code>.</li>
+      </ol>
+    </div>
+  </article>
+
+  <article class="experiment" id="ex2-e4" data-nav="E4 · Mesmo grupo">
+    <h3>E4 · Mesmo tipo, mesmo grupo: o número da collection decide</h3>
+    <p>Duas regras Application no mesmo grupo. Agora o número da collection faz diferença?</p>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>Em <code>{{c.rcg.wlB.name}}</code> já existe o Allow <code>{{c.rc.appWlBAllow.name}}</code> (collection {{c.rc.appWlBAllow.priority}}) para {{c.targets.learn}}. Você vai criar, <strong>no mesmo RCG</strong>, o Deny <code>{{c.rc.appWlBDeny.name}}</code> (collection {{c.rc.appWlBDeny.priority}}) para {{c.targets.learn}}, só para a VM-B. A VM-B acessa? E se o Deny mudar para <code>{{c.rc.appWlBDeny.e4Priority}}</code>?</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Crie o Deny.</strong> Em <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span>, clique em <span class="ui">+ Add › Rule collection</span> e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.appWlBDeny.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.appWlBDeny.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Deny</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.wlB.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.denyLearnB}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgWlB}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Http:80,Https:443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">FQDN</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.learn}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span>, espere <span class="ui">Succeeded</span> e mais 1 a 2 minutos.</li>
+        <li>Na VM-B, rode <code>Invoke-WebRequest -Uri https://{{c.targets.learn}} -UseBasicParsing</code>.</li>
+        <li><strong>Troque o número da collection.</strong> Na lista, clique em <code>{{c.rc.appWlBDeny.name}}</code> para editar, mude <span class="ui">Priority</span> para <code>{{c.rc.appWlBDeny.e4Priority}}</code>, salve e espere <span class="ui">Succeeded</span>. Teste de novo na VM-B.</li>
+        <li><strong>Obrigatório para o C2:</strong> marque <code>{{c.rc.appWlBDeny.name}}</code>, clique em <span class="ui">Delete</span>, confirme e espere <span class="ui">Succeeded</span>.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>RG={{c.names.rg}}
+POL={{c.names.polNs}}
+IPG_WL_B_ID=$(az network ip-group show -g "$RG" -n {{c.names.ipgWlB}} --query id -o tsv)
+
+wait_rcg() {
+  local rcg="$1"
+  until [ "$(az network firewall policy rule-collection-group show -g "$RG" --policy-name "$POL" -n "$rcg" --query provisioningState -o tsv)" = "Succeeded" ]; do
+    sleep 20
+  done
+  sleep 90
+}
+
+test_learn() {
+  for VM in "$@"; do
+    echo "== $VM =="
+    az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript \
+      --scripts 'try { Invoke-WebRequest -Uri https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 20 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }' \
+      --query "value[0].message" -o tsv
+  done
+}
+
+add_deny() {
+  az network firewall policy rule-collection-group collection add-filter-collection \
+    -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlB.name}} \
+    -n {{c.rc.appWlBDeny.name}} --collection-priority "$1" --action Deny \
+    --rule-name {{c.rules.denyLearnB}} --rule-type ApplicationRule \
+    --source-ip-groups "$IPG_WL_B_ID" --protocols Http=80 Https=443 \
+    --target-fqdns {{c.targets.learn}} \
+    -o none
+  wait_rcg {{c.rcg.wlB.name}}
+}
+
+remove_deny() {
+  az network firewall policy rule-collection-group collection remove \
+    -g "$RG" --policy-name "$POL" --rule-collection-group-name {{c.rcg.wlB.name}} \
+    -n {{c.rc.appWlBDeny.name}} \
+    -o none
+  wait_rcg {{c.rcg.wlB.name}}
+}
+
+echo "Deny em {{c.rc.appWlBDeny.priority}}"
+add_deny {{c.rc.appWlBDeny.priority}}
+test_learn {{c.names.vmB}}
+
+echo "Deny em {{c.rc.appWlBDeny.e4Priority}}"
+remove_deny
+add_deny {{c.rc.appWlBDeny.e4Priority}}
+test_learn {{c.names.vmB}}
+
+remove_deny</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> o resultado da VM-B com o Deny em <code>{{c.rc.appWlBDeny.priority}}</code> e depois em <code>{{c.rc.appWlBDeny.e4Priority}}</code>. Só então abra a resposta.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p><strong>Resultado esperado:</strong> com o Deny em {{c.rc.appWlBDeny.priority}}, a VM-B acessa o Learn; com o Deny em {{c.rc.appWlBDeny.e4Priority}}, a VM-B é negada.</p>
+      <table class="data">
+        <thead>
+          <tr><th>Situação</th><th>Ordem de leitura (volta Application)</th><th>VM-B no Learn</th><th>Por quê</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Deny em <strong>{{c.rc.appWlBDeny.priority}}</strong></td><td>infra ({{c.rcg.infrastructure.priority}}) → wl-a ({{c.rcg.wlA.priority}}) → wl-b ({{c.rcg.wlB.priority}}): <strong>{{c.rc.appWlBAllow.name}} ({{c.rc.appWlBAllow.priority}})</strong> → {{c.rc.appWlBDeny.name}} ({{c.rc.appWlBDeny.priority}}) → baseline ({{c.rcg.baselineNs.priority}})</td><td>✅ permitida</td><td>Em <code>{{c.rcg.wlA.name}}</code>, nada casa para a VM-B no Learn. Dentro de <code>{{c.rcg.wlB.name}}</code>, o <strong>Allow</strong> ({{c.rc.appWlBAllow.priority}}) é lido antes e decide. O Deny nem é lido.</td></tr>
+          <tr><td>Deny em <strong>{{c.rc.appWlBDeny.e4Priority}}</strong></td><td>infra ({{c.rcg.infrastructure.priority}}) → wl-a ({{c.rcg.wlA.priority}}) → wl-b ({{c.rcg.wlB.priority}}): <strong>{{c.rc.appWlBDeny.name}} ({{c.rc.appWlBDeny.e4Priority}})</strong> → {{c.rc.appWlBAllow.name}} ({{c.rc.appWlBAllow.priority}}) → baseline ({{c.rcg.baselineNs.priority}})</td><td>❌ negada</td><td>Agora o <strong>Deny</strong> ({{c.rc.appWlBDeny.e4Priority}}) é lido antes do Allow, dentro do mesmo grupo, e decide. O Allow nem é lido.</td></tr>
+        </tbody>
+      </table>
+      <p><strong>A pegadinha:</strong> no E2, o número da collection <strong>não</strong> mudava nada, porque as regras estavam em grupos diferentes. Aqui as duas collections estão no <strong>mesmo grupo</strong> e são do <strong>mesmo tipo</strong>, então quem desempata é o número da collection.</p>
+      <p><strong>Fechando os três experimentos:</strong></p>
+      <table class="data">
+        <thead><tr><th></th><th>Tipo</th><th>Grupo</th><th>Quem decide</th></tr></thead>
+        <tbody>
+          <tr><td>E2</td><td>igual</td><td>diferente</td><td>número do <strong>grupo</strong></td></tr>
+          <tr><td>E3</td><td><strong>diferente</strong></td><td>diferente</td><td>o <strong>tipo</strong></td></tr>
+          <tr><td>E4</td><td>igual</td><td><strong>igual</strong></td><td>número da <strong>collection</strong></td></tr>
+        </tbody>
+      </table>
+      <p><strong>Em uma frase:</strong> a ordem completa é tipo (volta), depois grupo, depois collection, e a primeira regra que casa decide.</p>
+      {{kql:ex2-precedencia}}
+    </details>
+  </article>
+
+  <article class="step" id="ex2-2" data-nav="2.2 Workbook e KQL">
+    <h3>2.2 · Fechar a análise: Workbook × KQL</h3>
+    <p class="what"><strong>O que:</strong> compare o workbook embutido do Azure Firewall com as consultas KQL deste exercício.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o workbook é ótimo para responder <em>o quê</em> aconteceu; a KQL é melhor para explicar <em>por quê</em>, mostrando Policy, RCG, RC e Rule.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">{{c.names.fwNs}} › Monitoring › Workbooks</span> e escolha o workbook embutido do Azure Firewall.</li>
+        <li>Observe os blocos de application rules e network rules.</li>
+        <li>Depois abra <span class="path">{{c.names.law}} › Logs</span> e rode as consultas do Ex2 para rastrear a regra exata que decidiu cada fluxo.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">O workbook é uma experiência do Portal. Pelo CLI, use as KQLs em Log Analytics ou o script de checkpoint.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você consegue apontar, para cada experimento, o que aconteceu no workbook e qual RCG/RC/Rule explicou a decisão na KQL.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex2-3" data-nav="2.3 Bônus · Flow trace">
+    <h3>2.3 · Bônus: ver o handshake TCP com Flow trace</h3>
+    <p class="what"><strong>O que:</strong> habilite o Flow trace no <code>{{c.names.fwEw}}</code>, repita o teste RDP da VM-A para a VM-B e leia o handshake TCP completo em <code>{{c.diagnostics.flowTrace.category}}</code>. No fim, desligue tudo.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> as tabelas de regra registram a decisão no primeiro pacote (SYN). Quando a conexão "não fecha", você precisa ver o resto do handshake: <code>SYN-ACK</code>, <code>FIN</code>/<code>FIN-ACK</code>, <code>RST</code> ou <code>INVALID</code>, que aparece, por exemplo, em roteamento assimétrico. O Flow trace mostra isso, mas só para regras de rede e de NAT (L3/L4), não para application rules. Gera muito log com conexões curtas: ligue só para investigar.</p>
+    </div>
+    <div class="callout warn">
+      <p class="callout-title">Opcional e com efeito na assinatura</p>
+      <p>O registro do recurso <code>{{c.diagnostics.flowTrace.feature}}</code> se aplica à assinatura inteira, não só ao lab, e pode levar vários minutos. Faça este bônus só se houver tempo e desfaça no último passo. Na sua assinatura de trial, isso não afeta outros ambientes.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Subscriptions › (sua assinatura) › Settings › Preview features</span>, procure <span class="ui">Enable TCP Connection Logging</span>, selecione e clique em <span class="ui">Register</span>. Aguarde o estado <span class="ui">Registered</span>.</li>
+        <li>Abra <span class="path">Firewalls › {{c.names.fwEw}} › Monitoring › Diagnostic settings</span>, edite <code>{{c.names.diag}}</code>, marque também a categoria de flow trace (<code>{{c.diagnostics.flowTrace.category}}</code>) e salve.</li>
+        <li>Conecte na VM-A pelo Bastion e rode <code>Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}</code> duas ou três vezes.</li>
+        <li>Abra <span class="path">{{c.names.law}} › Logs</span> e rode a consulta abaixo. Se continuar vazia depois de 15 minutos, consulte <a href="#ts-logs">Logs não aparecem</a>: o recurso pode precisar de uma atualização do firewall para valer.</li>
+        <li>Para desligar: desmarque a categoria no diagnostic setting e, em <span class="ui">Preview features</span>, clique em <span class="ui">Unregister</span> no mesmo recurso.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az feature register --namespace {{c.diagnostics.flowTrace.namespace}} --name {{c.diagnostics.flowTrace.feature}}
+az feature show --namespace {{c.diagnostics.flowTrace.namespace}} --name {{c.diagnostics.flowTrace.feature}} --query properties.state -o tsv
+az provider register --namespace {{c.diagnostics.flowTrace.namespace}}</code></pre>
+      <pre class="code" data-lang="bash"><code># Repita o show até aparecer Registered. Depois inclua a categoria no diagnostic setting:
+FW_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwEw}} --query id -o tsv)
+LAW_ID=$(az monitor log-analytics workspace show -g {{c.names.rg}} -n {{c.names.law}} --query id -o tsv)
+az monitor diagnostic-settings create \
+  --name {{c.names.diag}} \
+  --resource "$FW_ID" \
+  --workspace "$LAW_ID" \
+  --export-to-resource-specific true \
+  --logs '[{"category":"AZFWNetworkRule","enabled":true},{"category":"AZFWApplicationRule","enabled":true},{"category":"AZFWNatRule","enabled":true},{"category":"AZFWThreatIntel","enabled":true},{"category":"AZFWIdpsSignature","enabled":true},{"category":"AZFWFlowTrace","enabled":true}]' \
+  --metrics '[{"category":"AllMetrics","enabled":true}]'</code></pre>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  -g {{c.names.rg}} \
+  -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}' \
+  --query "value[0].message" -o tsv</code></pre>
+      <pre class="code" data-lang="bash"><code># Só se a tabela continuar vazia depois de 15 minutos: aplica o recurso no firewall.
+az network firewall update -g {{c.names.rg}} -n {{c.names.fwEw}}</code></pre>
+      <pre class="code" data-lang="bash"><code># Desligar no fim: volte o diagnostic setting às cinco categorias do Ex1 (o mesmo create, sem AZFWFlowTrace) e desregistre.
+az feature unregister --namespace {{c.diagnostics.flowTrace.namespace}} --name {{c.diagnostics.flowTrace.feature}}</code></pre>
+    </details>
+    {{kql:ex2-flow-trace}}
+    <div class="verify">
+      <p><strong>Verifique:</strong> para o teste RDP, a consulta mostra o fluxo <code>{{c.network.vmAIp}}</code> → <code>{{c.network.vmBIp}}:{{c.targets.rdpPort}}</code> em <code>{{c.names.fwEw}}</code> com <code>SYN-ACK</code> e, depois, <code>FIN</code>/<code>FIN-ACK</code>: a sessão abriu e fechou normalmente. <code>RST</code> ou <code>INVALID</code> seriam o sinal para investigar rota de retorno ou bloqueio. Ao terminar, o recurso está desregistrado e a categoria desmarcada.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex2-c2" data-nav="Checkpoint C2">
+    <h3>Checkpoint C2</h3>
+    <p>Execute o checkpoint somente depois de restaurar o estado final do exercício.</p>
+    <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C2</code></pre>
+    <p>O C2 exige <code>{{c.rcg.wlB.name}}</code> de volta em prioridade <code>{{c.rcg.wlB.priority}}</code>, <code>{{c.rc.netWlBTemp.name}}</code> e <code>{{c.rc.appWlBDeny.name}}</code> removidas, hits em <code>{{c.rules.denyLearn}}</code>, em <code>{{c.rules.allowLearn}}</code> e em <code>{{c.rules.allowHttpsAny}}</code>.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-title">O que você aprendeu</p>
+    <ul>
+      <li>O Azure Firewall Policy faz uma passada por tipo: todas as Network rules antes de todas as Application rules (e o DNAT antes das duas).</li>
+      <li>Dentro de cada tipo, o RCG manda; a prioridade da RC só desempata dentro do RCG avaliado.</li>
+      <li>O primeiro match vence e encerra a avaliação.</li>
+      <li>Network rules amplas podem mascarar application rules; valide por KQL, não só por sintoma.</li>
+      <li>Timeout ou "não abriu" é sintoma; quem decidiu de fato está no log, com Policy, RCG, RC e Rule.</li>
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,173 @@
+<section class="chapter" id="troubleshooting" data-title="Troubleshooting" data-progress="off">
+  <h2>Troubleshooting</h2>
+  <p class="meta">Diagnóstico rápido · preserve evidência antes de corrigir</p>
+
+  <div class="callout warn">
+    <p class="callout-title">Regra de ouro</p>
+    <p>Leia a mensagem completa antes de repetir comandos. Em especial, não reexecute o deploy depois do Ex3 sem entender o impacto: isso pode desfazer o <code>basePolicy</code> das filhas.</p>
+  </div>
+
+  <article class="step" id="ts-playbook" data-nav="Playbook: a ordem da investigação">
+    <h3>Playbook: em que ordem investigar</h3>
+    <p><strong>Quando usar:</strong> "o tráfego não passa" ou "está lento", sem pista ainda. Vá do mais barato para o mais caro e pare quando achar a causa.</p>
+    <ol>
+      <li><strong>O serviço está saudável?</strong> <span class="path">{{c.names.fwNs}} › Resource health</span> e a métrica <span class="ui">Firewall health state</span> por <span class="ui">Status</span>/<span class="ui">Reason</span> (Ex5, passo 5.5).</li>
+      <li><strong>O firewall está lento?</strong> <span class="ui">Latency Probe</span> e <span class="ui">Observed Capacity Units</span>. Lembre: a latência é a do firewall, não a do caminho inteiro.</li>
+      <li><strong>O pacote chega ao firewall certo?</strong> Rotas efetivas da NIC (<a href="#arquitetura-rotas">Arquitetura</a>). Sem rota, não há log.</li>
+      <li><strong>Qual regra decidiu?</strong> KQL nas tabelas de decisão (<a href="#kql-reference">rastreio multitabela, top denies, rule hits</a>) e o workbook.</li>
+      <li><strong>A sessão fechou?</strong> Flow trace (<a href="#ex2-3">bônus 2.3</a>): <code>SYN-ACK</code>, <code>FIN</code>, <code>RST</code>, <code>INVALID</code>. Só L3/L4; ligue só durante a investigação.</li>
+      <li><strong>Quem está consumindo banda?</strong> Top flows: mostra as conexões de maior throughput. Consome CPU do firewall; neste lab é demonstrado pelo instrutor, não executado pelo aluno.</li>
+      <li><strong>Alguém mudou algo?</strong> Change tracking no Resource Graph (<a href="#ex3-6">Ex3, passo 3.6</a>).</li>
+      <li><strong>Nada explica?</strong> Abra chamado com as evidências: horário, origem/destino/porta, rotas efetivas, consultas e métricas.</li>
+    </ol>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Cada etapa tem o seu comando no passo indicado. Aqui fica só a ordem.</p>
+    </details>
+  </article>
+
+  <article class="step" id="ts-quota" data-nav="Quota, região ou SKU">
+    <h3>Quota, região ou SKU indisponível</h3>
+    <p><strong>Sintoma:</strong> o preflight não encontra combinação válida ou o deploy falha com falta de quota/capacidade para VM, firewall, PIP ou região.</p>
+    <p><strong>Causa provável:</strong> a assinatura não tem quota regional/família suficiente, o SKU <code>{{c.vmSizes.0}}</code> não está disponível na região, ou <code>LAB_REGION</code>/<code>LAB_VM_SIZE</code> foram fixados para uma combinação inválida.</p>
+    <p><strong>Como confirmar:</strong> rode <code>./scripts/preflight.sh</code> e leia a tabela de motivos. Se estiver diagnosticando manualmente, confira quotas de VM com <code>az vm list-usage --location &lt;região&gt;</code> e confirme a região/SKU exportados no ambiente.</p>
+    <p><strong>Também acontece:</strong> o deploy falha com <code>RequestDisallowedByAzure</code> e "The selected region is currently not accepting new customers" (<code>aka.ms/locationineligible</code>). A região não aceita recursos novos nesta assinatura, mesmo com SKU e quota livres. O preflight agora valida o template com o ARM (sem criar nada) e pula essas regiões; se você forçou <code>LAB_REGION</code>, escolha outra.</p>
+    <p><strong>Como resolver:</strong> remova overrides incorretos e rerode o preflight; ou defina uma combinação suportada com <code>LAB_REGION</code> e <code>LAB_VM_SIZE</code> antes de executar <code>./scripts/deploy.sh</code>. Se o erro for quota real, solicite aumento ou use outra assinatura/região.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>./scripts/preflight.sh
+env | grep '^LAB_'
+az vm list-usage --location "$LAB_REGION" -o table</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-deploy" data-nav="Deploy falhou">
+    <h3>Deploy falhou</h3>
+    <p><strong>Sintoma:</strong> o deployment fica <span class="ui">Failed</span> ou um script mostra erro como <code>AuthorizationFailed</code>, <code>AnotherOperationInProgress</code> ou <code>InvalidTemplateDeployment</code>.</p>
+    <p><strong>Causa provável:</strong> permissão insuficiente no escopo de deploy, operação concorrente em recurso de rede, provider ainda não registrado, template inválido ou parâmetro incompatível.</p>
+    <p><strong>Como confirmar:</strong> abra <span class="path">Subscription › Deployments › fwlab-*</span> e leia a mensagem completa da operação com falha, incluindo <span class="ui">Details</span> e erro interno. Não use apenas o código resumido.</p>
+    <p><strong>Como resolver:</strong> corrija a causa específica. Para <code>AuthorizationFailed</code>, valide o papel no escopo e se o provider está registrado. Para <code>AnotherOperationInProgress</code>, aguarde a operação concorrente terminar. Para <code>InvalidTemplateDeployment</code>, leia o erro interno de recurso/SKU/quota. Se o deploy falhar <strong>antes do Ex1</strong> e a causa for corrigida (por exemplo, numa versão nova do ZIP), rode <code>./scripts/deploy.sh --force</code> com a <strong>mesma senha</strong>: o deploy é incremental e só cria o que faltou. Depois do Ex3, não use <code>--force</code> nem rerode a base sem aceitar que o <code>basePolicy</code> pode ser removido.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code># Use o Portal como fonte principal da mensagem completa.
+# Se souber o nome do deployment, consulte o status sem reexecutar:
+az deployment sub show --name "&lt;deployment-name&gt;" -o jsonc</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-cse" data-nav="Bootstrap da VM">
+    <h3>Bootstrap da VM falhou</h3>
+    <p><strong>Sintoma:</strong> o checkpoint C0 acusa falha na extensão <code>{{c.names.cse}}</code>, a página IIS não responde dentro da VM ou o marcador <code>{{c.vm.bootstrapMarker}}</code> não aparece.</p>
+    <p><strong>Causa provável:</strong> CustomScriptExtension falhou durante instalação do IIS/regras do Windows Firewall, a VM não conseguiu baixar dependências necessárias do agente, ou o caminho de saída pelo firewall N-S ainda não estava pronto.</p>
+    <p><strong>Como confirmar:</strong> confira o instance view da VM e procure a extensão <code>{{c.names.cse}}</code>. Dentro da VM, leia <code>C:\fwlab\bootstrap.log</code> e verifique se existe <code>{{c.vm.bootstrapMarkerPath}}</code>.</p>
+    <p><strong>Como resolver:</strong> preserve o log, confirme se o firewall N-S e a collection de infraestrutura estão em <code>Succeeded</code>, então reavalie a extensão. Se o problema depender de tráfego de plataforma, mantenha a regra de infraestrutura para Blob e registre a causa exata.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az vm get-instance-view -g {{c.names.rg}} -n {{c.names.vmA}} \
+  --query "instanceView.extensions[?name=='{{c.names.cse}}'].{name:name,status:statuses[-1].displayStatus,substatus:substatuses[-1].message}" \
+  -o jsonc
+
+az vm run-command invoke -g {{c.names.rg}} -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'Get-Content C:\fwlab\bootstrap.log -Tail 80; Test-Path {{c.vm.bootstrapMarkerPath}}' \
+  --query "value[0].message" -o tsv</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-cloudshell" data-nav="Cloud Shell caiu">
+    <h3>Cloud Shell caiu ou a sessão expirou</h3>
+    <p><strong>Sintoma:</strong> o clone sumiu, <code>.lab/env</code> não existe ou os scripts não encontram mais os arquivos do lab.</p>
+    <p><strong>Causa provável:</strong> Cloud Shell é temporário e encerra sessões ociosas; ao recriar a sessão, o que estava fora do diretório persistente pode se perder.</p>
+    <p><strong>Também acontece:</strong> o preflight para com <code>Bicep CLI not found</code> ou com extensão ausente. Repita o passo <a href="#ex0-2">0.2</a> (<code>az bicep install</code> e as extensões) e rode o preflight de novo.</p>
+    <p><strong>Como confirmar:</strong> reabra o Cloud Shell e veja se <code>~/{{c.repo.cloneDir}}</code> existe.</p>
+    <p><strong>Como resolver:</strong> reclone e rerode os scripts idempotentes que leem estado do Azure, como o checkpoint. Os recursos no Azure não são afetados pela queda do Cloud Shell. Não use keep-alive para contornar a expiração da sessão.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az bicep install
+git clone {{c.repo.url}} ~/{{c.repo.cloneDir}}
+cd ~/{{c.repo.cloneDir}}
+./scripts/checkpoint.sh C0</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-bastion" data-nav="Bastion não conecta">
+    <h3>Bastion não conecta na VM</h3>
+    <p><strong>Sintoma:</strong> o botão <span class="ui">Connect via Bastion</span> falha, fica carregando ou a sessão RDP não abre.</p>
+    <p><strong>Causa provável:</strong> Bastion não está <code>Succeeded</code>, peering N-S ↔ spoke não está ativo, a VM não está pronta, ou o Windows Firewall não tem a regra de RDP esperada para a <code>AzureBastionSubnet</code>.</p>
+    <p><strong>Como confirmar:</strong> confira o estado de <code>{{c.names.bastion}}</code>, os peerings <code>{{c.names.peerNsToA}}</code>/<code>{{c.names.peerNsToB}}</code> e a regra de firewall do Windows via Run Command.</p>
+    <p><strong>Como resolver:</strong> aguarde Bastion e peerings ficarem prontos; se a VM está acessível por Run Command, restaure a regra de RDP do Windows para <code>{{c.network.snetBastion}}</code>. Bastion Basic suporta conexão a VMs em VNets pareadas; se a conexão ainda falhar, use Run Command como acesso alternativo e registre a evidência.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network bastion show -g {{c.names.rg}} -n {{c.names.bastion}} --query "{name:name,state:provisioningState}" -o table
+az network vnet peering list -g {{c.names.rg}} --vnet-name {{c.names.vnetNs}} -o table
+az vm run-command invoke -g {{c.names.rg}} -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'Get-NetFirewallRule -DisplayName "*Remote Desktop*" | Select-Object DisplayName,Enabled,Direction,Action' \
+  --query "value[0].message" -o tsv</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-logs" data-nav="Logs não aparecem">
+    <h3>Logs não aparecem</h3>
+    <p><strong>Sintoma:</strong> as consultas KQL retornam vazio logo após um teste.</p>
+    <p><strong>Causa provável:</strong> diagnostic setting não foi criado nos dois firewalls, o destino não está em modo <span class="ui">Resource specific</span>, a categoria necessária não foi selecionada, a ingestão ainda está atrasada ou o intervalo de tempo da consulta não cobre o teste.</p>
+    <p><strong>Como confirmar:</strong> confira <span class="path">Firewalls › Diagnostic settings</span> nos dois firewalls, valide <code>{{c.diagnostics.destinationType}}</code>, selecione um intervalo de 30 a 60 minutos e use a consulta de referência <a href="#kql-reference">tabelas recebendo dados</a>.</p>
+    <p><strong>Como resolver:</strong> corrija o diagnostic setting para <code>{{c.names.law}}</code>, aguarde 5–15 minutos, gere novo tráfego e consulte novamente. Ausência de log não é prova de Allow nem de Deny.</p>
+    <p><strong>Caso especial, <code>{{c.diagnostics.flowTrace.category}}</code> vazia:</strong> confirme que o recurso <code>{{c.diagnostics.flowTrace.feature}}</code> está <span class="ui">Registered</span> e que a categoria está marcada no diagnostic setting. Se ainda assim continuar vazia, faça uma atualização no firewall (<code>az network firewall update</code>, sem mudar nada) para aplicar o recurso. Application rules nunca aparecem nessa tabela.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Use o Portal para conferir visualmente as categorias. Para a investigação KQL, use a seção <a href="#kql-reference">Referência KQL</a> em vez de duplicar a consulta aqui.</p>
+    </details>
+  </article>
+
+  <article class="step" id="ts-kv-loading" data-nav="Key Vault Loading">
+    <h3>Seletor do Key Vault travado em Loading</h3>
+    <p><strong>Sintoma:</strong> no Ex6, a tela de TLS inspection fica presa em <span class="ui">Loading</span> ao selecionar o Key Vault/certificado.</p>
+    <p><strong>Causa provável:</strong> inconsistência temporária do Portal, permissões de segredo insuficientes para o usuário/managed identity ou recurso auto-gerado ainda propagando.</p>
+    <p><strong>Como confirmar:</strong> confira se o Key Vault <code>{{c.names.kvPrefix}}*</code> existe, se a managed identity <code>{{c.names.miTlsPrefix}}*</code> foi criada e se há permissão de <span class="ui">Get</span>/<span class="ui">List</span> para secrets.</p>
+    <p><strong>Como resolver:</strong> no Portal, alterne TLS inspection para <span class="ui">Disabled</span>, clique em <span class="ui">Save</span>, volte para <span class="ui">Enabled</span> e selecione novamente. Se persistir, valide permissões no Key Vault e registre evidência para ajuste do roteiro.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az keyvault list -g {{c.names.rg}} --query "[?starts_with(name, '{{c.names.kvPrefix}}')].{name:name,location:location}" -o table</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-propagation" data-nav="Regra não funcionou">
+    <h3>A regra "não funcionou"</h3>
+    <p><strong>Sintoma:</strong> logo após salvar uma policy, o teste ainda mostra o comportamento antigo.</p>
+    <p><strong>Causa provável:</strong> a alteração ainda está propagando para o firewall, ou você testou com uma conexão persistente aberta antes da mudança.</p>
+    <p><strong>Como confirmar:</strong> confira o provisioning state do firewall/policy e gere uma conexão nova depois de esperar. Compare o horário do teste com o horário dos logs.</p>
+    <p><strong>Como resolver:</strong> espere o recurso voltar a <code>Succeeded</code> e mais 1–2 minutos antes de testar. Feche o cliente, rode um novo processo e use KQL para provar a regra atual.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network firewall show -g {{c.names.rg}} -n {{c.names.fwNs}} --query "{name:name,state:provisioningState}" -o table
+az network firewall policy show -g {{c.names.rg}} -n {{c.names.polNs}} --query "{name:name,state:provisioningState}" -o table</code></pre>
+    </details>
+  </article>
+
+  <article class="step" id="ts-rdp-drop" data-nav="RDP caiu após mudança">
+    <h3>RDP caiu depois de uma mudança</h3>
+    <p><strong>Sintoma:</strong> uma sessão RDP A→B aberta cai imediatamente depois de salvar uma regra Deny.</p>
+    <p><strong>Causa provável:</strong> mudar uma regra para negar tráfego previamente permitido derruba sessões existentes correspondentes.</p>
+    <p><strong>Como confirmar:</strong> abra os logs <code>AZFWNetworkRule</code> no horário da queda e procure o Deny de TCP <code>{{c.targets.rdpPort}}</code> vindo da policy/RCG esperados.</p>
+    <p><strong>Como resolver:</strong> isso é esperado no Ex3 quando o guardrail é aplicado. Use Bastion para administração, porque Bastion → VM passa pelo peering N-S e não pelo firewall E-W do experimento.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Use a consulta <code>ex3-guardrail</code> na seção KQL; não duplicamos o bloco aqui para evitar âncoras repetidas.</p>
+    </details>
+  </article>
+
+  <article class="step" id="ts-redeploy" data-nav="Redeploy desfez basePolicy">
+    <h3>Redeploy desfez o <code>basePolicy</code> do Ex3</h3>
+    <p><strong>Sintoma:</strong> depois de reexecutar o deploy da base, <code>{{c.names.polEw}}</code> e <code>{{c.names.polNs}}</code> não herdam mais de <code>{{c.names.polParent}}</code>.</p>
+    <p><strong>Causa provável:</strong> o deploy base reconcilia as policies filhas para o estado original sem <code>basePolicy</code>.</p>
+    <p><strong>Como confirmar:</strong> confira a propriedade <code>basePolicy.id</code> das duas policies. Se estiver vazia, a hierarquia ativa foi removida.</p>
+    <p><strong>Como resolver:</strong> restaure a associação ao pai com o mesmo caminho do Ex3 e refaça as provas de herança. Não declare C3 concluído com base em logs antigos.</p>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>PARENT_ID=$(az network firewall policy show -g {{c.names.rg}} -n {{c.names.polParent}} --query id -o tsv)
+az network firewall policy update -g {{c.names.rg}} -n {{c.names.polEw}} --set basePolicy.id="$PARENT_ID"
+az network firewall policy update -g {{c.names.rg}} -n {{c.names.polNs}} --set basePolicy.id="$PARENT_ID"</code></pre>
+    </details>
+  </article>
+</section>

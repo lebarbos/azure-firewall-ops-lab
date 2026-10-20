@@ -1,0 +1,21 @@
+// Ex2 E3 — tráfego da VM-B para www.bing.com: tipo Network x Application.
+// Tabelas: AZFWNetworkRule e AZFWApplicationRule.
+// Leia TipoLog: o Allow de Network pode aparecer sem FQDN; confirme por SourceIp e porta 443.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(2h)
+    | where SourceIp == "10.120.1.4"
+    | where DestinationPort == 443
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", SourceIp, DestinationIp, DestinationPort, Fqdn = "", Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(2h)
+    | where SourceIp == "10.120.1.4"
+    | where Fqdn =~ "www.bing.com"
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", SourceIp, DestinationIp = "", DestinationPort, Fqdn, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, TipoLog, SourceIp, DestinationIp, DestinationPort, Fqdn, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc

@@ -1,0 +1,29 @@
+// Referência — hits por Policy/RCG/RC/Rule, incluindo regras sem hit na janela.
+// Tabelas: AZFWNetworkRule, AZFWApplicationRule e AZFWNatRule.
+// Leia Hits = 0 como "não observado na janela", não como regra inútil definitiva.
+let RegrasEsperadas = datatable(Policy:string, RuleCollectionGroup:string, RuleCollection:string, Rule:string)
+[
+    "pol-fwlab-ns", "rcg-infrastructure", "app-infra", "allow-azure-blob",
+    "pol-fwlab-ns", "rcg-wl-a", "app-wl-a-deny", "deny-learn",
+    "pol-fwlab-ns", "rcg-wl-a", "app-wl-a-deny", "deny-bing",
+    "pol-fwlab-ns", "rcg-wl-b", "net-wl-b-temp", "allow-https-any",
+    "pol-fwlab-ns", "rcg-wl-b", "app-wl-b-allow", "allow-learn",
+    "pol-fwlab-ns", "rcg-wl-b", "app-wl-b-deny", "deny-learn-b",
+    "pol-fwlab-ns", "rcg-baseline", "app-baseline", "allow-microsoft",
+    "pol-fwlab-ew", "rcg-baseline", "net-baseline-ew", "allow-icmp",
+    "pol-fwlab-ew", "rcg-baseline", "net-baseline-ew", "allow-rdp",
+    "pol-fwlab-parent", "rcg-corp", "net-corp-guardrail", "deny-rdp-east-west",
+    "pol-fwlab-parent", "rcg-corp", "app-corp", "allow-microsoft-corp",
+    "pol-fwlab-ns", "rcg-tls", "app-tls-allow", "allow-wiki-firewall",
+    "pol-fwlab-ns", "rcg-tls", "app-tls-deny", "deny-gambling"
+];
+let Hits =
+    union isfuzzy=true AZFWNetworkRule, AZFWApplicationRule, AZFWNatRule
+    | where TimeGenerated > ago(24h)
+    | summarize Hits = count(), UltimoHit = max(TimeGenerated) by Policy, RuleCollectionGroup, RuleCollection, Rule;
+RegrasEsperadas
+| join kind=leftouter Hits on Policy, RuleCollectionGroup, RuleCollection, Rule
+| extend Hits = coalesce(Hits, 0)
+| extend EstadoNaJanela = iff(Hits == 0, "sem hit observado", "com hit")
+| project Policy, RuleCollectionGroup, RuleCollection, Rule, Hits, EstadoNaJanela, UltimoHit
+| order by Hits asc, Policy asc, RuleCollectionGroup asc, RuleCollection asc, Rule asc

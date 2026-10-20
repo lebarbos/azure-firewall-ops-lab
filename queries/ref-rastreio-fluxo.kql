@@ -1,0 +1,35 @@
+// Referência — rastreio de um fluxo do lab por todas as tabelas de decisão AZFW* (multitabela).
+// Não é o log Flow trace do Azure Firewall (AZFWFlowTrace); esse está em ex2-flow-trace.kql.
+// Tabelas: AZFWNetworkRule, AZFWApplicationRule, AZFWNatRule, AZFWThreatIntel e AZFWIdpsSignature.
+// Leia em ordem temporal para seguir origem, destino/URL, ação e regra acionada.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn = "", TargetUrl = "", TranslatedIp = "", TranslatedPort = int(null), Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule, SignatureId = ""
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", SourceIp, SourcePort, DestinationIp = "", DestinationPort, Fqdn, TargetUrl, TranslatedIp = "", TranslatedPort = int(null), Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule, SignatureId = ""
+),
+(
+    AZFWNatRule
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "DNAT", SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn = "", TargetUrl = "", TranslatedIp, TranslatedPort, Protocol, Action = "DNAT", ActionReason = "", Policy, RuleCollectionGroup, RuleCollection, Rule, SignatureId = ""
+),
+(
+    AZFWThreatIntel
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "ThreatIntel", SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn, TargetUrl, TranslatedIp = "", TranslatedPort = int(null), Protocol, Action, ActionReason = "", Policy = "", RuleCollectionGroup = "", RuleCollection = "", Rule = "", SignatureId = ""
+),
+(
+    AZFWIdpsSignature
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "IDPS", SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn = "", TargetUrl = "", TranslatedIp = "", TranslatedPort = int(null), Protocol, Action, ActionReason = "", Policy = "", RuleCollectionGroup = "", RuleCollection = "", Rule = "", SignatureId
+)
+| where SourceIp in ("10.110.1.4", "10.120.1.4") or TranslatedIp in ("10.110.1.4", "10.120.1.4") or DestinationPort in (80, 443, 3389)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, TipoLog, SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn, TargetUrl, TranslatedIp, TranslatedPort, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule, SignatureId
+| order by TimeGenerated desc
+| take 300

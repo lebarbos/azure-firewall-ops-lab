@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guia:
+    name: Guia e testes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar guia
+        run: python3 guide/build.py --check
+
+      - name: Executar testes
+        run: python3 -m unittest discover -s tests -v
+
+  bicep:
+    name: Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build e lint Bicep
+        uses: azure/CLI@v2
+        with:
+          inlineScript: |
+            az bicep build --file infra/main.bicep --outfile /tmp/main.json
+            az bicep lint --file infra/main.bicep
+
+  shell:
+    name: Shell
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: ShellCheck
+        run: shellcheck -x scripts/*.sh scripts/lib/*.sh tests/fixtures/*.sh
+
+  neutralidade:
+    name: Neutralidade
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verificar neutralidade
+        run: ./scripts/check-neutral.sh --generic-only .

@@ -1,0 +1,19 @@
+// Referência — principais destinos negados.
+// Tabelas: AZFWNetworkRule e AZFWApplicationRule.
+// Leia Total por destino para priorizar investigação operacional.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(24h)
+    | where Action =~ "Deny"
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", SourceIp, Destino = DestinationIp, DestinationPort, Fqdn = "", ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(24h)
+    | where Action =~ "Deny"
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", SourceIp, Destino = Fqdn, DestinationPort, Fqdn, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| summarize Total = count(), UltimoEvento = max(TimeGenerated) by Firewall, TipoLog, Destino, DestinationPort, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| top 20 by Total desc

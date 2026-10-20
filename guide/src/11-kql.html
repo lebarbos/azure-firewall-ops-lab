@@ -1,0 +1,123 @@
+<section class="chapter" id="kql" data-title="Referência KQL" data-progress="off">
+  <h2>Referência KQL</h2>
+  <p class="meta">Consultas para Log Analytics · use em <span class="path">{{c.names.law}} › Logs</span></p>
+
+  <p>O lab usa logs estruturados em tabelas resource-specific. Em vez de concentrar tudo em <code>AzureDiagnostics</code>, o diagnostic setting dos firewalls envia eventos para tabelas <code>AZFW*</code>, o que facilita separar regra de rede, aplicação, DNAT, Threat Intelligence e IDPS.</p>
+
+  <div class="callout tip">
+    <p class="callout-title">Como ler as consultas</p>
+    <p>Escolha um intervalo de tempo que cubra o teste recém-executado, filtre por <code>_ResourceId</code> para separar <code>{{c.names.fwEw}}</code> de <code>{{c.names.fwNs}}</code>, use <code>project</code> para enxergar só as colunas relevantes, <code>summarize</code> para contagens e <code>render</code> quando a pergunta pedir tendência.</p>
+  </div>
+
+  <article class="step" id="kql-tables" data-nav="Tabelas AZFW">
+    <h3>Tabelas principais</h3>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Tabela</th>
+          <th>O que registra</th>
+          <th>Uso no lab</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>AZFWNetworkRule</code></td>
+          <td>Matches de regras Network com origem, destino, porta, ação e atributos da regra.</td>
+          <td>E-W, guardrail de RDP, default deny e comparação Network × Application.</td>
+        </tr>
+        <tr>
+          <td><code>AZFWApplicationRule</code></td>
+          <td>Matches de regras Application, incluindo FQDN/URL quando disponível, ação e atributos da regra.</td>
+          <td>Allow/Deny de FQDN, TLS inspection, URL filtering e web categories.</td>
+        </tr>
+        <tr>
+          <td><code>AZFWNatRule</code></td>
+          <td>Eventos de DNAT quando uma regra NAT casa com o tráfego e traduz destino/porta.</td>
+          <td>Fora dos exercícios: usada na demonstração de DNAT do instrutor. Fica vazia no lab.</td>
+        </tr>
+        <tr>
+          <td><code>AZFWThreatIntel</code></td>
+          <td>Eventos de Threat Intelligence.</td>
+          <td>Referência operacional para investigação; pode ficar vazio no lab.</td>
+        </tr>
+        <tr>
+          <td><code>AZFWIdpsSignature</code></td>
+          <td>Pacotes que corresponderam a assinaturas IDPS.</td>
+          <td>Ex6, assinatura <code>{{c.targets.idpsSignatureId}}</code> com user agent <code>{{c.targets.idpsUserAgent}}</code>.</td>
+        </tr>
+        <tr>
+          <td><code>AZFWApplicationRuleAggregation</code> · <code>AZFWNetworkRuleAggregation</code> · <code>AZFWNatRuleAggregation</code></td>
+          <td>Hits agregados por hora, por regra.</td>
+          <td>Policy Analytics (Ex4); habilitadas no diagnostic setting do Ex1.</td>
+        </tr>
+        <tr>
+          <td><code>AzureMetrics</code></td>
+          <td>Métricas de plataforma, como <code>{{c.alerts.appDeny.metric}}</code>, <code>{{c.alerts.snat.metric}}</code> e <code>{{c.alerts.health.metric}}</code>.</td>
+          <td>Alertas do Ex5 e investigação de saúde/SNAT.</td>
+        </tr>
+      </tbody>
+    </table>
+  </article>
+
+  <article class="step" id="kql-ex1" data-nav="Ex1 · Observabilidade">
+    <h3>Ex1 · Observabilidade e primeiras regras</h3>
+    <p><strong>Allow × Deny por firewall:</strong> responde se há decisões em ambos os firewalls e separa o E-W do N-S por <code>_ResourceId</code>.</p>
+    {{kql:ex1-allow-deny}}
+    <p><strong>Default deny:</strong> mostra negações sem regra explícita casada, útil para provar que ausência de allow não é falha do teste.</p>
+    {{kql:ex1-default-deny}}
+    <p><strong>Linha do tempo:</strong> lista os eventos recentes de rede e aplicação com Policy, RCG, RC e Rule para reconstruir o que acabou de acontecer.</p>
+    {{kql:ex1-timeline}}
+  </article>
+
+  <article class="step" id="kql-ex2" data-nav="Ex2 · Precedência">
+    <h3>Ex2 · Precedência de RCG, RC e tipo</h3>
+    <p><strong>Precedência (E2 e E4):</strong> compara VM-A e VM-B contra <code>{{c.targets.learn}}</code> e <code>{{c.targets.bing}}</code>, mostrando qual Policy/RCG/RC/Rule decidiu.</p>
+    {{kql:ex2-precedencia}}
+    <p><strong>Tipo vence o RCG:</strong> responde se o tráfego da VM-B para <code>{{c.targets.bing}}</code> caiu em Network ou Application.</p>
+    {{kql:ex2-tipo}}
+  </article>
+
+  <article class="step" id="kql-ex3" data-nav="Ex3 · Herança">
+    <h3>Ex3 · Policy pai e filhas</h3>
+    <p><strong>Herança:</strong> mostra a coluna <code>Policy</code> e o RCG <code>{{c.rcg.corp.name}}</code> para diferenciar decisão do pai e da filha.</p>
+    {{kql:ex3-heranca}}
+    <p><strong>Guardrail:</strong> prova o Deny de TCP <code>{{c.targets.rdpPort}}</code> entre spokes vindo do pai.</p>
+    {{kql:ex3-guardrail}}
+  </article>
+
+  <article class="step" id="kql-ex4" data-nav="Ex4 · Policy Analytics">
+    <h3>Ex4 · Policy Analytics</h3>
+    <p><strong>Agregações:</strong> hits por policy, RCG, collection e regra no firewall N-S, a partir das mesmas tabelas que alimentam o Policy Analytics.</p>
+    {{kql:ex4-policy-analytics}}
+  </article>
+
+  <article class="step" id="kql-ex5" data-nav="Ex5 · Alertas">
+    <h3>Ex5 · Alertas de métrica</h3>
+    <p><strong>Deny rate:</strong> conta negações de aplicação por minuto no firewall N-S para correlacionar com <code>{{c.names.alertAppDeny}}</code>.</p>
+    {{kql:ex5-deny-rate}}
+    <p><strong>Métricas:</strong> consulta <code>AzureMetrics</code> para <code>{{c.alerts.appDeny.metric}}</code>, <code>{{c.alerts.snat.metric}}</code> e <code>{{c.alerts.health.metric}}</code>.</p>
+    {{kql:ex5-metricas}}
+  </article>
+
+  <article class="step" id="kql-ex6" data-nav="Ex6 · TLS e IDPS">
+    <h3>Ex6 · TLS, URL, categorias e IDPS</h3>
+    <p><strong>TLS/URL/categoria:</strong> mostra <code>IsTlsInspected</code>, <code>TargetUrl</code> e <code>WebCategory</code> para provar URL filtering e web categories.</p>
+    {{kql:ex6-tls-url-categoria}}
+    <p><strong>IDPS:</strong> busca a assinatura <code>{{c.targets.idpsSignatureId}}</code> e confirma se o modo bloqueou o teste com user agent <code>{{c.targets.idpsUserAgent}}</code>.</p>
+    {{kql:ex6-idps}}
+  </article>
+
+  <article class="step" id="kql-reference" data-nav="Consultas de referência">
+    <h3>Consultas de referência</h3>
+    <p><strong>Top denies:</strong> resume os destinos mais negados para investigar ruído, erro de regra ou tráfego inesperado.</p>
+    {{kql:ref-top-denies}}
+    <p><strong>Rule hits:</strong> conta hits por Policy/RCG/RC/Rule e ajuda a identificar regras usadas, não usadas ou sobrando após experimentos.</p>
+    {{kql:ref-rule-hits}}
+    <p><strong>Rastreio de um fluxo (multitabela):</strong> segue um fluxo por origem/destino/porta em todas as tabelas de decisão <code>AZFW*</code>, útil quando a resposta do teste não explica o caminho. Não confundir com o log Flow trace do Azure Firewall (<code>{{c.diagnostics.flowTrace.category}}</code>), que mostra o handshake TCP e está no <a href="#ex2-3">bônus 2.3</a>.</p>
+    {{kql:ref-rastreio-fluxo}}
+    <p><strong>Threat Intel:</strong> lista eventos de inteligência de ameaça quando habilitados e presentes.</p>
+    {{kql:ref-threat-intel}}
+    <p><strong>Tabelas recebendo dados:</strong> mostra quais tabelas <code>AZFW*</code> têm eventos recentes; use antes de concluir que "os logs não aparecem".</p>
+    {{kql:ref-tables}}
+  </article>
+</section>

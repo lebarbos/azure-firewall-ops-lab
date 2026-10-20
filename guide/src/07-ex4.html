@@ -1,0 +1,150 @@
+<section class="chapter" id="ex4" data-title="Ex4 · Policy Analytics">
+  <h2>Ex4 · Policy Analytics</h2>
+  <p class="meta">⏱ 20 min · Checkpoint C4</p>
+
+  <p>Neste exercício, você usa o Policy Analytics, habilitado no Ex1, para responder a perguntas de manutenção que o log linha a linha não responde bem: quais regras quase não são usadas, quais fluxos dominam o tráfego e o que exatamente passa por uma regra específica.</p>
+  <p>Você chega aqui com cerca de três horas de tráfego do Ex1, do Ex2 e do Ex3 na policy <code>{{c.names.polNs}}</code>: regras de baseline, os experimentos de precedência e a herança do pai.</p>
+
+  <div class="callout warn">
+    <p class="callout-title">Os dados chegam de hora em hora</p>
+    <p>O Policy Analytics só analisa o tráfego que passou <strong>depois</strong> de habilitado e agrega os dados a cada hora. Se a tela estiver vazia, confira o passo 1.1 (a policy N-S habilitada e as categorias <code>AZFW*Aggregation</code> no diagnostic setting) e espere a próxima agregação.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-title">Fontes usadas neste exercício</p>
+    <p><a href="https://learn.microsoft.com/azure/firewall/policy-analytics" target="_blank" rel="noopener">Azure Firewall Policy Analytics</a> e as referências das tabelas <a href="https://learn.microsoft.com/azure/azure-monitor/reference/tables/azfwapplicationruleaggregation" target="_blank" rel="noopener">AZFWApplicationRuleAggregation</a> e <a href="https://learn.microsoft.com/azure/azure-monitor/reference/tables/azfwnetworkruleaggregation" target="_blank" rel="noopener">AZFWNetworkRuleAggregation</a>.</p>
+  </div>
+
+  <article class="step" id="ex4-1" data-nav="4.1 Painel de insights">
+    <h3>4.1 · Abrir o painel de insights</h3>
+    <p class="what"><strong>O que:</strong> abra o Policy Analytics de <code>{{c.names.polNs}}</code> e leia o resumo da policy.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o painel junta, numa tela só, o que você levaria várias consultas para montar: quantas regras a policy tem, quantas recebem tráfego e onde estão os pontos de atenção. É o ponto de partida de uma revisão periódica de regras.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Abra o painel.</strong> Abra <span class="path">Firewall Policies › {{c.names.polNs}} › Monitoring › Policy Analytics</span>.</li>
+        <li>Confira no topo que o workspace é <code>{{c.names.law}}</code> e ajuste o intervalo de tempo para cobrir o lab, por exemplo as últimas 8 horas.</li>
+        <li>Leia os cartões do resumo e anote quantas regras a policy tem e quantas tiveram tráfego no intervalo.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p>Não há comando para o painel. O CLI confirma a configuração que o alimenta:</p>
+      <pre class="code" data-lang="bash"><code>az network firewall policy show \
+  -g {{c.names.rg}} \
+  -n {{c.names.polNs}} \
+  --query "{enabled:insights.isEnabled, retentionDays:insights.retentionDays, workspace:insights.logAnalyticsResources.defaultWorkspaceId.id}" \
+  -o jsonc</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o painel mostra dados da policy. Se mostrar que não há dados, a primeira agregação ainda não aconteceu: siga para o 4.4 (a KQL mostra se as tabelas de agregação já receberam linhas) e volte depois.</p>
+    </div>
+  </article>
+
+  <article class="experiment" id="ex4-2" data-nav="4.2 Experimento · Regras pouco usadas">
+    <h3>4.2 · Experimento: qual regra perdeu o tráfego?</h3>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>No Ex3, o pai passou a liberar <code>{{c.targets.baselineFqdn}}</code> antes das filhas. Qual regra de <code>{{c.names.polNs}}</code> deixou de receber tráfego por causa disso?</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Abra a análise de regras.</strong> No Policy Analytics de <code>{{c.names.polNs}}</code>, abra a análise de regras (<span class="ui">Rule analytics</span>) e a lista de regras com pouco uso.</li>
+        <li>Ordene pelo número de hits e procure as regras com zero ou quase zero no intervalo.</li>
+        <li>Para cada uma, anote em qual RCG e collection ela está.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI para a análise de regras. A consulta do passo 4.4 mostra os hits por regra a partir das mesmas tabelas; uma regra que não aparece nela não teve tráfego na janela.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> as regras com pouco ou nenhum uso. Só então abra a resposta.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p><code>{{c.rules.denyLearn}}</code>, em <code>{{c.rcg.wlA.name}}</code> › <code>{{c.rc.appWlA.name}}</code>, deve parar de receber hits depois do 3.4: o Allow <code>{{c.rules.allowMicrosoftCorp}}</code> do pai casa antes e decide o acesso a <code>{{c.targets.learn}}</code>. Regras de experimentos que você já removeu também não aparecem, porque não existem mais na policy.</p>
+      <div class="callout tip">
+        <p class="callout-title">Lição de operação</p>
+        <p>Regra sem uso nem sempre é lixo: ela pode estar <strong>sombreada</strong> por outra que casa antes, como aqui. Antes de remover, descubra por que ela parou de receber tráfego. Se a intenção era bloquear, a correção está na regra que a sombreia, não nela.</p>
+      </div>
+    </details>
+  </article>
+
+  <article class="step" id="ex4-3" data-nav="4.3 Fluxos e regra única">
+    <h3>4.3 · Ler os principais fluxos e uma regra específica</h3>
+    <p class="what"><strong>O que:</strong> veja quais fluxos mais passam pelo firewall N-S e analise o tráfego que casa com <code>{{c.rules.denyBing}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> a análise de fluxos responde "quem fala com quem e por qual regra". A análise de uma regra mostra o tráfego real que ela pega, o que permite apertar origem e destino de regras amplas sem adivinhar.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Principais fluxos.</strong> No Policy Analytics de <code>{{c.names.polNs}}</code>, abra a análise de fluxos (<span class="ui">Traffic flow analysis</span>). Identifique os fluxos de <code>{{c.network.vmAIp}}</code> e <code>{{c.network.vmBIp}}</code> e a regra que decidiu cada um.</li>
+        <li><strong>Uma regra.</strong> Abra a análise de regra única (<span class="ui">Single rule analysis</span>) e escolha:
+          <ul>
+            <li>Rule collection group: <code>{{c.rcg.wlA.name}}</code></li>
+            <li>Rule collection: <code>{{c.rc.appWlA.name}}</code></li>
+            <li>Rule: <code>{{c.rules.denyBing}}</code></li>
+          </ul>
+        </li>
+        <li>Confira as origens e os destinos que casaram com a regra e compare com o que ela permite na definição.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI para a análise de fluxos e de regra única. Use a consulta do passo 4.4 filtrando a regra <code>{{c.rules.denyBing}}</code>.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> <code>{{c.rules.denyBing}}</code> mostra tráfego de <code>{{c.network.vmAIp}}</code> e de <code>{{c.network.vmBIp}}</code> para <code>{{c.targets.bing}}</code>, gerado no Ex2. Se o Ex5 já tivesse rodado, o loop do alerta apareceria aqui como um pico da VM-A.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex4-4" data-nav="4.4 KQL das agregações">
+    <h3>4.4 · Ler as mesmas agregações com KQL</h3>
+    <p class="what"><strong>O que:</strong> consulte as tabelas de agregação que alimentam o Policy Analytics.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o Policy Analytics não é uma fonte nova: ele lê <code>AZFWApplicationRuleAggregation</code> e <code>AZFWNetworkRuleAggregation</code>, que o diagnostic setting do Ex1 envia ao workspace. Saber disso permite montar seus próprios relatórios e explica por que os dados chegam de hora em hora.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Log Analytics workspaces › {{c.names.law}} › Logs</span>.</li>
+        <li>Cole a consulta abaixo e clique em <span class="ui">Run</span>.</li>
+        <li>Compare a lista de regras com a do passo 4.2: as regras sem tráfego não aparecem na consulta.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>WS_ID=$(az monitor log-analytics workspace show -g {{c.names.rg}} -n {{c.names.law}} --query customerId -o tsv)
+az monitor log-analytics query \
+  --workspace "$WS_ID" \
+  --analytics-query "$(grep -v '^//' queries/ex4-policy-analytics.kql)" \
+  -o table</code></pre>
+    </details>
+    {{kql:ex4-policy-analytics}}
+    <div class="verify">
+      <p><strong>Verifique:</strong> a consulta devolve linhas com <code>Policy</code>, RCG, collection e regra, e a coluna <code>Hits</code> soma os acessos de cada hora. Se não houver linhas, a primeira agregação ainda não aconteceu.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex4-c4" data-nav="Checkpoint C4">
+    <h3>Checkpoint C4</h3>
+    <p>Rode o checkpoint para confirmar a configuração e a chegada dos dados.</p>
+    <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C4</code></pre>
+    <p>O C4 verifica: Policy Analytics habilitado em <code>{{c.names.polNs}}</code> com o workspace <code>{{c.names.law}}</code> e linhas nas tabelas de agregação nas últimas 6 horas.</p>
+  </div>
+
+  <div class="callout tip">
+    <p class="callout-title">O que você aprendeu</p>
+    <ul>
+      <li>Policy Analytics é a ferramenta de manutenção de regras: uso, fluxos e análise de uma regra, sem montar KQL do zero.</li>
+      <li>Ele só vê o que passou depois de habilitado e trabalha com dados agregados por hora; habilite cedo.</li>
+      <li>Regra sem uso pode estar sombreada por outra que casa antes; entenda o motivo antes de remover.</li>
+      <li>Os dados vêm das tabelas <code>AZFW*Aggregation</code> do mesmo workspace, e você pode consultá-las direto.</li>
+    </ul>
+  </div>
+</section>

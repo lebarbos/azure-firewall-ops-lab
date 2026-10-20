@@ -1,0 +1,21 @@
+// Ex3 — change tracking (preview): o que mudou nas rule collection groups das policies do lab.
+// Rode no Azure Resource Graph Explorer (não no Log Analytics). Tabela: networkresourcechanges.
+// Leia ChangeType (Create/Update/Delete) e, em Changes, o valor anterior e o novo de cada propriedade.
+// Quem mudou não vem aqui (changedBy = Unspecified): case o Timestamp com o Activity Log, que traz o caller.
+networkresourcechanges
+| where properties contains "microsoft.network/firewallpolicies/rulecollectiongroups"
+| where resourceGroup =~ "rg-fwlab"
+| extend parsedProperties = parse_json(properties)
+| extend Timestamp = todatetime(parsedProperties.changeAttributes.timestamp),
+         ChangeType = tostring(parsedProperties.changeType),
+         Changes = todynamic(parsedProperties.changes),
+         ChangesCount = toint(parsedProperties.changeAttributes.changesCount),
+         FirewallPolicy = extract('/firewallPolicies/([^/]+)/', 1, tostring(id)),
+         RuleCollectionGroup = extract('/ruleCollectionGroups/([^/]+)', 1, tostring(id))
+| mv-expand ChangeKey = bag_keys(Changes)
+| extend ChangeDetails = todynamic(Changes[tostring(ChangeKey)])
+| project Timestamp, FirewallPolicy, RuleCollectionGroup, ChangeType, ChangesCount,
+          Property = tostring(ChangeKey),
+          PreviousValue = tostring(ChangeDetails.previousValue),
+          NewValue = tostring(ChangeDetails.newValue)
+| order by Timestamp desc

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="{{c.title}}">
+  <title>{{c.title}}</title>
+  <script>
+    (function () {
+      var pref = "auto";
+      try { pref = window.localStorage.getItem("fwlab:v3:theme") || "auto"; } catch (error) { /* sem storage: automático */ }
+      if (pref !== "light" && pref !== "dark") pref = "auto";
+      var dark = pref === "dark" || (pref === "auto" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme-pref", pref);
+    }());
+  </script>
+  <style>
+{{css}}
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  <button class="menu-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Menu</button>
+  <aside id="sidebar" class="sidebar" aria-label="Navegação do guia">
+    <div class="brand">
+      <p class="eyebrow">Workshop técnico</p>
+      <p class="brand-title">{{c.title}}</p>
+      <p class="brand-meta">Versão {{c.version}}</p>
+    </div>
+    <div class="theme-switch" role="group" aria-label="Tema de cores">
+      <span class="theme-label">Tema</span>
+      <button type="button" data-theme-choice="auto" aria-pressed="false" title="Segue o tema do sistema operacional">Auto</button>
+      <button type="button" data-theme-choice="light" aria-pressed="false">Claro</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false">Escuro</button>
+    </div>
+    <div class="progress" aria-live="polite">
+      <div class="progress-row"><span>Progresso</span><strong id="progress-count">0/0</strong></div>
+      <div class="progress-bar" aria-hidden="true"><span id="progress-fill"></span></div>
+      <button id="reset-progress" type="button">Zerar progresso</button>
+    </div>
+    {{nav}}
+  </aside>
+  <main id="conteudo" class="content" tabindex="-1">
+    <header class="hero">
+      <p class="eyebrow">Laboratório guiado · Azure Firewall</p>
+      <h1>{{c.title}}</h1>
+      <p>Guia autocontido para operar, testar e diagnosticar Azure Firewall em uma topologia didática com secured vWAN, firewall N-S e logs estruturados.</p>
+    </header>
+    {{content}}
+    <footer class="site-footer">
+      <p>{{c.title}} · versão {{c.version}}</p>
+      <p>Conteúdo cliente-neutro. Execute mudanças apenas no ambiente de lab autorizado e faça cleanup obrigatório ao final.</p>
+    </footer>
+  </main>
+  <script>
+{{js}}
+  </script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<section class="chapter" id="inicio" data-title="Início" data-progress="off">
+  <h2>Início</h2>
+  <p class="meta">⏱ 20 min para boas-vindas, preflight e disparo do deploy</p>
+
+  <div class="callout warn">
+    <p class="callout-title">Custo e cleanup são parte do exercício</p>
+    <p>Este lab cria dois Azure Firewalls Premium, um secured Virtual Hub, Bastion e duas VMs. Você deve executar o cleanup verificado no fim da sessão.</p>
+  </div>
+
+  <article class="step" id="inicio-objetivo" data-nav="Objetivo e público">
+    <h3>O que é o lab e para quem</h3>
+    <p class="what"><strong>O que:</strong> um laboratório prático para operar, testar e diagnosticar Azure Firewall em uma topologia com tráfego E-W e N-S separados.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o objetivo não é decorar telas do Portal. Você vai prever qual política decide um fluxo, alterar a configuração com segurança e provar a decisão por rota, teste e KQL.</p>
+    </div>
+    <div class="portal">
+      <h4>Você vai aprender</h4>
+      <ul>
+        <li>Diferenciar tráfego E-W, saída N-S e administração via Bastion.</li>
+        <li>Explicar a ordem real de processamento: pai antes da filha; DNAT, Network e Application; RCG e RC por prioridade.</li>
+        <li>Usar IP Groups, diagnostic settings resource-specific, workbook e consultas KQL para responder por que um fluxo passou ou falhou.</li>
+        <li>Tratar propagação de policy como parte da operação, não como detalhe.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI: esta é uma orientação conceitual para a sessão.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você entende que o lab é individual, temporário e não representa uma configuração de produção.</p>
+    </div>
+  </article>
+
+  <article class="step" id="inicio-pre-requisitos" data-nav="Pré-requisitos">
+    <h3>Pré-requisitos</h3>
+    <p class="what"><strong>O que:</strong> confirme o acesso antes de abrir o Cloud Shell.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> falhas de quota, permissão ou assinatura errada consomem mais tempo que a teoria do lab.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Use uma assinatura própria ou de treinamento, com permissão <strong>Owner</strong> ou <strong>Contributor</strong> suficiente para deployment e recursos de rede.</li>
+        <li>Abra o Azure Portal em um navegador moderno e confirme que você está no diretório correto.</li>
+        <li>Abra <span class="path">Cloud Shell › Bash</span>. O roteiro assume Bash, não PowerShell.</li>
+        <li>Tenha uma senha forte para o usuário <code>{{c.vm.adminUsername}}</code>. Você vai digitá-la no script; ela nunca deve ir para arquivo, chat, print ou parâmetro de linha de comando.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az version --output table
+az extension list --query "[].name" --output table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> Cloud Shell abre em Bash e a assinatura exibida é a assinatura de treinamento.</p>
+    </div>
+  </article>
+
+  <article class="step" id="inicio-custo" data-nav="Custo estimado">
+    <h3>Custo estimado</h3>
+    <p class="what"><strong>O que:</strong> use os valores do contrato como referência de ordem de grandeza.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o custo do lab é dominado pelos dois firewalls. Um ambiente esquecido ligado custa mais que a sessão inteira.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Item</th><th>US$/h</th></tr></thead>
+      <tbody>
+        <tr><td>{{c.cost.items.0.item}}</td><td>{{c.cost.items.0.usdPerHour}}</td></tr>
+        <tr><td>{{c.cost.items.1.item}}</td><td>{{c.cost.items.1.usdPerHour}}</td></tr>
+        <tr><td>{{c.cost.items.2.item}}</td><td>{{c.cost.items.2.usdPerHour}}</td></tr>
+        <tr><td>{{c.cost.items.3.item}}</td><td>{{c.cost.items.3.usdPerHour}}</td></tr>
+        <tr><td>{{c.cost.items.4.item}}</td><td>{{c.cost.items.4.usdPerHour}}</td></tr>
+        <tr><td>{{c.cost.items.5.item}}</td><td>{{c.cost.items.5.usdPerHour}}</td></tr>
+        <tr><th>Total aproximado</th><th>{{c.cost.totalUsdPerHour}}</th></tr>
+      </tbody>
+    </table>
+    <div class="callout danger">
+      <p class="callout-title">Custo visível no início</p>
+      <p>Sessão estimada: cerca de <strong>US$ {{c.cost.sessionUsd}}</strong>. Ambiente esquecido ligado: cerca de <strong>US$ {{c.cost.forgottenUsdPerDay}}/dia</strong>. O cleanup é obrigatório.</p>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem comando de custo no lab: o número vem da fonte declarada no contrato, <em>{{c.cost.source}}</em>, consultada em {{c.cost.queried}}.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você sabe que processamento de dados, ingestão de Log Analytics e IPs públicos podem adicionar centavos ao valor didático.</p>
+    </div>
+  </article>
+
+  <article class="step" id="inicio-regras" data-nav="Regras do lab">
+    <h3>Regras do lab</h3>
+    <p class="what"><strong>O que:</strong> siga estas regras durante todos os exercícios.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> a maior parte dos falsos negativos em Azure Firewall acontece por testar cedo demais, usar senha de forma insegura ou refazer o deploy no momento errado.</p>
+    </div>
+    <div class="portal">
+      <h4>Regras operacionais</h4>
+      <ul>
+        <li>Depois de mudar policy ou rule collection, espere o firewall voltar a <span class="ui">Succeeded</span> e aguarde mais 1–2 minutos antes do teste.</li>
+        <li><strong>Não rode o deploy de novo depois do Ex3.</strong> Reexecutar a base pode desfazer o <code>basePolicy</code> das filhas.</li>
+        <li>Senha nunca vai para arquivo, argumento, print ou log. Se vazar, descarte o ambiente.</li>
+        <li>O lab é cliente-neutro e temporário. Não copie esta topologia como padrão de produção sem revisão de arquitetura.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code># Após mudanças de policy, use checkpoint/status do lab antes de testar:
+./scripts/checkpoint.sh C0</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você consegue explicar por que "rodar de novo para corrigir" pode piorar o estado depois da hierarquia de policies.</p>
+    </div>
+  </article>
+
+  <article class="step" id="inicio-agenda" data-nav="Agenda">
+    <h3>Agenda de 1 dia</h3>
+    <p class="what"><strong>O que:</strong> use a agenda como cadência, não como promessa de SLA do Azure.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o deploy pode passar da teoria. Se isso acontecer, o instrutor usa demonstração e você retoma quando C0 ficar verde.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Bloco</th><th>Min</th><th>Checkpoint</th></tr></thead>
+      <tbody>
+        <tr><td>Boas-vindas, preflight e disparo do deploy</td><td>20</td><td>—</td></tr>
+        <tr><td>Teoria: arquitetura, Routing Intent, UDR, regras e hierarquia</td><td>50</td><td>—</td></tr>
+        <tr><td>Validação da base</td><td>10</td><td>C0</td></tr>
+        <tr><td>Ex1 · Observabilidade e primeiras regras</td><td>75</td><td>C1</td></tr>
+        <tr><td>Ex2 · Precedência</td><td>50</td><td>C2</td></tr>
+        <tr><td>Ex3 · Pai e filhas</td><td>45</td><td>C3</td></tr>
+        <tr><td>Ex4 · Policy Analytics</td><td>20</td><td>C4</td></tr>
+        <tr><td>Ex5 · Alertas</td><td>30</td><td>C5</td></tr>
+        <tr><td>Ex6 · TLS/IDPS opcional</td><td>30</td><td>C6</td></tr>
+        <tr><td>Cleanup verificado</td><td>15</td><td>CX</td></tr>
+      </tbody>
+    </table>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI: a agenda orienta a facilitação da sessão.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você sabe em qual checkpoint deve estar ao final de cada bloco.</p>
+    </div>
+  </article>
+
+  <article class="step" id="inicio-como-usar" data-nav="Como usar o guia">
+    <h3>Como usar este guia</h3>
+    <p class="what"><strong>O que:</strong> cada passo segue a ordem O que → Por que → Portal → CLI → Verifique.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o Portal fica visível para facilitar a aula. A CLI fica recolhida para quem preferir automação ou precisar repetir.</p>
+    </div>
+    <div class="portal">
+      <h4>Componentes de aprendizado</h4>
+      <ul>
+        <li><strong>Previsão:</strong> responda antes de testar. O campo fica salvo no navegador.</li>
+        <li><strong>Checkpoints:</strong> comandos somente leitura que confirmam o estado esperado.</li>
+        <li><strong>Progresso:</strong> os checkboxes são locais ao navegador e não provam execução no Azure.</li>
+        <li><strong>Botão Copiar:</strong> aparece em todo bloco <code>pre.code</code> e funciona também via <code>file://</code>, com fallback.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>git clone {{c.repo.url}}.git ~/{{c.repo.cloneDir}}
+cd ~/{{c.repo.cloneDir}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você consegue navegar pelo menu lateral, abrir um bloco CLI e copiar um comando.</p>
+    </div>
+  </article>
+</section>

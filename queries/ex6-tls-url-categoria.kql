@@ -1,0 +1,10 @@
+// Ex6 — TLS inspection, URL path e categoria web.
+// Tabela: AZFWApplicationRule.
+// Leia IsTlsInspected, TargetUrl e WebCategory para validar URL filtering e categoria Gambling.
+AZFWApplicationRule
+| where TimeGenerated > ago(2h)
+| where SourceIp in ("10.110.1.4", "10.120.1.4")
+| where TargetUrl has_any ("en.wikipedia.org/wiki/Firewall", "en.wikipedia.org/wiki/Proxy_server") or WebCategory =~ "Gambling"
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, SourceIp, Fqdn, TargetUrl, WebCategory, IsTlsInspected, DestinationPort, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc

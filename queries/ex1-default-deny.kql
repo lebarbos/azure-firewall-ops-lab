@@ -1,0 +1,20 @@
+// Ex1 — negações sem regra casada, isto é, default deny.
+// Tabelas: AZFWNetworkRule e AZFWApplicationRule.
+// Leia ActionReason = "Default Action" e Rule vazio como tráfego sem match explícito.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(2h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn = "", Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(2h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", SourceIp, SourcePort, DestinationIp = "", DestinationPort, Fqdn, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+)
+| where Action =~ "Deny"
+| where isempty(Rule) or ActionReason =~ "Default Action"
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, TipoLog, SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc
+| take 200

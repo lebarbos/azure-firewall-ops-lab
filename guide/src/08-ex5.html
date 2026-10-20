@@ -1,0 +1,302 @@
+<section class="chapter" id="ex5" data-title="Ex5 · Alertas de métrica">
+  <h2>Ex5 · Alertas de métrica</h2>
+  <p class="meta">⏱ 30 min · Checkpoint C5</p>
+
+  <div class="callout tip">
+    <p class="callout-title">Objetivo</p>
+    <p>Você vai sair do modo “olhar o log quando alguém reclama” para o modo “ser avisado quando um sinal operacional importante muda”. Neste exercício, o alerta que dispara usa a métrica <code>{{c.alerts.appDeny.metric}}</code>; o alerta de <code>{{c.alerts.health.metric}}</code> fica configurado para operação.</p>
+  </div>
+
+  <p>Um alerta de <strong>métrica</strong> avalia séries temporais já agregadas pelo Azure Monitor. Um alerta de <strong>log</strong> avalia uma consulta KQL no Log Analytics. Aqui usamos métrica porque o objetivo é reduzir latência operacional e custo de avaliação: o sinal já existe como métrica de plataforma do Azure Firewall. Use log alert quando você precisar de lógica avançada, junções ou enriquecimento com KQL.</p>
+
+  <div class="callout warn">
+    <p class="callout-title">Teste de canal ≠ teste de condição</p>
+    <p><span class="ui">Test action group</span> prova que o e-mail consegue receber uma notificação de exemplo. Ele não prova que a condição do alerta ficou verdadeira, nem que o alerta entrou em estado <span class="ui">Fired</span>. Por isso a prova deste exercício é um <strong>disparo real</strong> (passos 5.2 e 5.3), que funciona em qualquer assinatura.</p>
+  </div>
+
+  <article class="step" id="ex5-1" data-nav="5.1 Action Group">
+    <h3>5.1 · Criar o Action Group</h3>
+    <p class="what"><strong>O que:</strong> crie o Action Group <code>{{c.names.ag}}</code>, com nome curto <code>{{c.names.agShort}}</code>, e adicione o e-mail do aluno.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o Action Group separa o canal de notificação da regra de alerta. Assim, vários alertas podem reutilizar o mesmo destino de e-mail, webhook ou automação.</p>
+      <p>O <strong>Display name</strong> (até 12 caracteres) é o que aparece no assunto do e-mail. O <strong>common alert schema</strong> entrega o mesmo formato de payload para qualquer tipo de alerta, o que facilita ler o e-mail e, depois, ligar um webhook.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Crie o grupo.</strong> Abra <span class="path">Monitor › Alerts › Action groups</span> e clique em <span class="ui">+ Create</span>. Na aba <span class="ui">Basics</span>, preencha:
+          <ul>
+            <li><span class="ui">Resource group</span>: <code>{{c.names.rg}}</code></li>
+            <li><span class="ui">Region</span>: <span class="ui">Global</span> (padrão)</li>
+            <li><span class="ui">Action group name</span>: <code>{{c.names.ag}}</code></li>
+            <li><span class="ui">Display name</span>: <code>{{c.names.agShort}}</code></li>
+          </ul>
+        </li>
+        <li><strong>Adicione o e-mail.</strong> Clique em <span class="ui">Next: Notifications</span> e, em <span class="ui">Notification type</span>, escolha <span class="ui">Email/SMS message/Push/Voice</span>. No painel lateral:
+          <ul>
+            <li><span class="ui">Email</span>: marcado, com o <strong>seu</strong> e-mail no lugar de <code>voce@exemplo.com</code></li>
+            <li><span class="ui">Enable the common alert schema</span>: <span class="ui">Yes</span></li>
+          </ul>
+          Clique em <span class="ui">OK</span> e, na coluna <span class="ui">Name</span>, use <code>aluno</code>.</li>
+        <li>Pule as abas <span class="ui">Actions</span> e <span class="ui">Tags</span>. Clique em <span class="ui">Review + create</span> › <span class="ui">Create</span> e espere a implantação terminar.</li>
+        <li><strong>Teste o canal (opcional, só em assinatura paga).</strong> Abra <span class="path">Monitor › Alerts › Action groups › {{c.names.ag}}</span> e clique em <span class="ui">Test</span>:
+          <ul>
+            <li><span class="ui">Select sample type</span>: <span class="ui">Metric alert (static threshold)</span></li>
+            <li>Canal: <code>aluno</code></li>
+          </ul>
+          Clique em <span class="ui">Test</span> e espere <span class="ui">Success</span>. Não feche o painel enquanto o teste roda.
+          <strong>Na assinatura de avaliação (Free Trial), o teste falha:</strong> o Portal mostra <span class="ui">Failed</span> com o erro vazio, e o Activity Log registra <code>Conflict</code> com “Free subscription not supported”. É uma limitação do tipo de assinatura, não do seu Action Group: pule o teste e siga para o 5.2.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az monitor action-group create \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.ag}} \
+  --short-name {{c.names.agShort}} \
+  --action email aluno voce@exemplo.com usecommonalertschema</code></pre>
+      <p>Teste do canal (opcional; falha com <code>Conflict</code> na Free Trial):</p>
+      <pre class="code" data-lang="bash"><code>az monitor action-group test-notifications create \
+  --resource-group {{c.names.rg}} \
+  --action-group {{c.names.ag}} \
+  --alert-type metricstaticthreshold \
+  --add-action email aluno voce@exemplo.com usecommonalertschema</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> chega o e-mail de confirmação de que você foi adicionado ao Action Group (em assinatura paga, chega também o de teste, com “Test” no assunto). Se for o primeiro uso desse endereço no tenant, o Portal mostra <span class="ui">Verification email sent</span>: abra o link do e-mail em até 30 minutos, senão o endereço não recebe as notificações do 5.3. Se nada chegar em 5 minutos, olhe o spam; o Ex5 segue mesmo assim, porque o disparo também aparece em <span class="path">Monitor › Alerts</span>.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex5-2" data-nav="5.2 Alerta de deny">
+    <h3>5.2 · Criar o alerta de Application Deny</h3>
+    <p class="what"><strong>O que:</strong> crie <code>{{c.names.alertAppDeny}}</code> no firewall <code>{{c.names.fwNs}}</code>, usando a métrica <code>{{c.alerts.appDeny.metric}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> este é o alerta didático que deve disparar. Ele soma os hits de Application Rules com <code>{{c.alerts.appDeny.dimension}}</code> = <code>{{c.alerts.appDeny.dimensionValue}}</code>, ou seja, bloqueios explícitos de regra de aplicação, e compara a soma com o limiar.</p>
+      <p>Com <strong>Automatically resolve alerts</strong>, o alerta é <em>stateful</em>: dispara uma vez e volta sozinho para <span class="ui">Resolved</span> quando a condição deixa de ser verdadeira. Sem essa opção, ele notifica de novo a cada avaliação.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Comece pelo firewall.</strong> Abra <span class="path">Firewalls › {{c.names.fwNs}} › Monitoring › Alerts</span> e clique em <span class="ui">+ Create › Alert rule</span>. O escopo já vem preenchido com <code>{{c.names.fwNs}}</code>.
+          <br>Se você começar por <span class="path">Monitor › Alerts</span>, marque no <span class="ui">Scope</span> o <strong>firewall</strong>, não o resource group nem a assinatura. Com escopo de RG ou assinatura, a lista de sinais mostra só <span class="ui">Log search</span>, <span class="ui">Resource health</span> e <span class="ui">Activity log</span>, sem as métricas do firewall.</li>
+        <li><strong>Defina a condição.</strong> Na aba <span class="ui">Condition</span>, clique em <span class="ui">See all signals</span>, filtre <span class="ui">Signal type</span> = <span class="ui">Metrics</span>, selecione <span class="ui">Application rules hit count</span> e clique em <span class="ui">Apply</span>. Preencha:
+          <ul>
+            <li><span class="ui">Threshold</span>: <span class="ui">Static</span></li>
+            <li><span class="ui">Aggregation type</span>: <span class="ui">Total</span></li>
+            <li><span class="ui">Operator</span>: <span class="ui">Greater than</span></li>
+            <li><span class="ui">Threshold value</span>: <code>{{c.alerts.appDeny.threshold}}</code></li>
+            <li><span class="ui">Split by dimensions</span>: <span class="ui">Dimension name</span> <code>{{c.alerts.appDeny.dimension}}</code>, <span class="ui">Operator</span> <span class="ui">=</span>, <span class="ui">Dimension values</span> <code>{{c.alerts.appDeny.dimensionValue}}</code></li>
+            <li><span class="ui">Check every</span>: <span class="ui">1 minute</span></li>
+            <li><span class="ui">Lookback period</span>: <span class="ui">5 minutes</span></li>
+          </ul>
+          Se <code>{{c.alerts.appDeny.dimensionValue}}</code> não aparecer na lista, use <span class="ui">Add custom value</span>.</li>
+        <li><strong>Ligue o Action Group.</strong> Na aba <span class="ui">Actions</span>, clique em <span class="ui">Select action groups</span>, marque <code>{{c.names.ag}}</code> e clique em <span class="ui">Select</span>.</li>
+        <li><strong>Nomeie a regra.</strong> Na aba <span class="ui">Details</span>, preencha:
+          <ul>
+            <li><span class="ui">Resource group</span>: <code>{{c.names.rg}}</code></li>
+            <li><span class="ui">Severity</span>: <span class="ui">3 - Informational</span></li>
+            <li><span class="ui">Alert rule name</span>: <code>{{c.names.alertAppDeny}}</code></li>
+            <li><span class="ui">Advanced options</span>: <span class="ui">Enable upon creation</span> e <span class="ui">Automatically resolve alerts</span> marcados</li>
+          </ul>
+          Clique em <span class="ui">Review + create</span> › <span class="ui">Create</span>.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>FW_NS_ID=$(az network firewall show \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.fwNs}} \
+  --query id -o tsv)
+
+AG_ID=$(az monitor action-group show \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.ag}} \
+  --query id -o tsv)
+
+az monitor metrics alert create \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.alertAppDeny}} \
+  --scopes "$FW_NS_ID" \
+  --condition "total {{c.alerts.appDeny.metric}} &gt; {{c.alerts.appDeny.threshold}} where {{c.alerts.appDeny.dimension}} includes {{c.alerts.appDeny.dimensionValue}}" \
+  --window-size 5m \
+  --evaluation-frequency 1m \
+  --severity {{c.alerts.appDeny.severity}} \
+  --action "$AG_ID" \
+  --description "Application rule denies on {{c.names.fwNs}}"</code></pre>
+      <p>Se o Metrics explorer ainda não listar <code>{{c.alerts.appDeny.dimensionValue}}</code> para a dimensão <code>{{c.alerts.appDeny.dimension}}</code>, crie temporariamente sem o filtro de dimensão:</p>
+      <pre class="code" data-lang="bash"><code>FW_NS_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwNs}} --query id -o tsv)
+AG_ID=$(az monitor action-group show -g {{c.names.rg}} -n {{c.names.ag}} --query id -o tsv)
+
+az monitor metrics alert create \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.alertAppDeny}} \
+  --scopes "$FW_NS_ID" \
+  --condition "total {{c.alerts.appDeny.metric}} &gt; {{c.alerts.appDeny.threshold}}" \
+  --window-size 5m \
+  --evaluation-frequency 1m \
+  --severity {{c.alerts.appDeny.severity}} \
+  --action "$AG_ID" \
+  --description "Application rule hits on {{c.names.fwNs}}; sem filtro de Status"</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o alerta aparece em <span class="path">Monitor › Alerts › Alert rules</span>. Sem a dimensão, qualquer hit de Application Rule entra na soma; isso aumenta ruído e pode disparar com tráfego permitido.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex5-3" data-nav="5.3 Gerar o disparo">
+    <h3>5.3 · Gerar denies a partir da VM-A</h3>
+    <p class="what"><strong>O que:</strong> execute {{c.targets.denyLoopCount}} requisições para <code>https://{{c.targets.bing}}</code> a partir de <code>{{c.names.vmA}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> depois do Ex3, o acesso a <code>{{c.targets.bing}}</code> a partir da VM-A ainda cai na regra <code>{{c.rules.denyBing}}</code>. O Ex3 adicionou um Allow no pai para <code>{{c.targets.baselineFqdn}}</code> e um guardrail de RDP entre spokes; nenhum dos dois permite <code>{{c.targets.bing}}</code>, e a regra temporária de Network Allow do Ex2 já foi removida.</p>
+      <p>{{c.targets.denyLoopCount}} requisições seguidas passam do limiar de <code>{{c.alerts.appDeny.threshold}}</code> dentro da janela de 5 minutos. Tráfego esparso não dispararia: é para isso que serve o limiar.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Virtual machines › {{c.names.vmA}} › Connect › Bastion</span>.</li>
+        <li>Use o usuário <code>{{c.vm.adminUsername}}</code> e a senha criada no Ex0.</li>
+        <li>Dentro da VM, abra <span class="path">Start › Windows PowerShell</span> e execute o loop abaixo. Ele leva cerca de 2 minutos.</li>
+        <li>Toda linha deve mostrar <code>DENY/timeout esperado</code>. Se aparecer <code>ALLOW (inesperado)</code>, alguma regra de Allow cobre <code>{{c.targets.bing}}</code>: revise os exercícios anteriores antes de seguir.</li>
+      </ol>
+      <pre class="code" data-lang="powershell"><code>for ($i = 1; $i -le {{c.targets.denyLoopCount}}; $i++) {
+  try {
+    Invoke-WebRequest -Uri "https://{{c.targets.bing}}" -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Write-Host "$i ALLOW (inesperado)"
+  } catch {
+    Write-Host "$i DENY/timeout esperado: $($_.Exception.Message)"
+  }
+  Start-Sleep -Milliseconds 500
+}</code></pre>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts '$ErrorActionPreference = "Continue"
+for ($i = 1; $i -le {{c.targets.denyLoopCount}}; $i++) {
+  try {
+    Invoke-WebRequest -Uri "https://{{c.targets.bing}}" -UseBasicParsing -TimeoutSec 3 | Out-Null
+    Write-Host "$i ALLOW (inesperado)"
+  } catch {
+    Write-Host "$i DENY/timeout esperado: $($_.Exception.Message)"
+  }
+  Start-Sleep -Milliseconds 500
+}' \
+  --query "value[0].message" -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> aguarde de 5 a 10 minutos para o alerta avaliar a janela de <code>{{c.alerts.appDeny.window}}</code> a cada <code>{{c.alerts.appDeny.frequency}}</code>. Se a regra ou a métrica acabou de ser criada, aguarde até 10–15 minutos. Depois abra <span class="path">Monitor › Alerts</span>, filtre o resource group <code>{{c.names.rg}}</code> e confira <code>{{c.names.alertAppDeny}}</code> com <span class="ui">Monitor condition</span> <span class="ui">Fired</span>; o e-mail deve chegar pelo Action Group.</p>
+      <p>Pare o tráfego, espere alguns minutos e clique em <span class="ui">Refresh</span>: o <span class="ui">Monitor condition</span> volta sozinho para <span class="ui">Resolved</span>, porque a regra tem <span class="ui">Automatically resolve alerts</span>. Repare que o <span class="ui">Alert state</span> continua <span class="ui">New</span>: ele é o status de atendimento (<span class="ui">New</span>/<span class="ui">Acknowledged</span>/<span class="ui">Closed</span>) e só muda quando uma pessoa altera. Resolver a condição não fecha o alerta.</p>
+    </div>
+    {{kql:ex5-deny-rate}}
+  </article>
+
+  <article class="step" id="ex5-4" data-nav="5.4 Alerta de health">
+    <h3>5.4 · Configurar o alerta de health</h3>
+    <p class="what"><strong>O que:</strong> crie <code>{{c.names.alertHealthNs}}</code>, um alerta de prevenção que avisa quando o health do <code>{{c.names.fwNs}}</code> cai abaixo de <code>{{c.alerts.health.threshold}}</code>%.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o 5.2 avisa sobre um comportamento do tráfego; este avisa sobre a <strong>saúde do serviço</strong>. <code>{{c.alerts.health.metric}}</code> resume o estado do firewall e cai, por exemplo, quando as portas SNAT de saída se esgotam: acima de {{c.alerts.snat.degradedAbove}}% de <code>{{c.alerts.snat.metric}}</code>, o health fica em 50% com status <span class="ui">Degraded</span> e reason <span class="ui">SNAT port</span>. Por isso um alerta de health já cobre o caso mais comum de SNAT.</p>
+      <p>Em produção, crie um alerta de health <strong>por firewall</strong> (aqui seria também no <code>{{c.names.fwEw}}</code>): o alerta de métrica multirrecurso não cobre <code>Microsoft.Network/azureFirewalls</code>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Firewalls › {{c.names.fwNs}} › Monitoring › Alerts › + Create › Alert rule</span> e preencha como no passo 5.2, sem <span class="ui">Split by dimensions</span>:
+          <ul>
+            <li><span class="ui">Scope</span>: <code>{{c.names.fwNs}}</code></li>
+            <li><span class="ui">Signal name</span>: <span class="ui">Firewall health state</span></li>
+            <li><span class="ui">Threshold</span>: <span class="ui">Static</span></li>
+            <li><span class="ui">Aggregation type</span>: <span class="ui">Average</span></li>
+            <li><span class="ui">Operator</span>: <span class="ui">Less than</span>; <span class="ui">Threshold value</span>: <code>{{c.alerts.health.threshold}}</code></li>
+            <li><span class="ui">Check every</span>: <span class="ui">1 minute</span>; <span class="ui">Lookback period</span>: <span class="ui">5 minutes</span></li>
+            <li><span class="ui">Actions</span>: <code>{{c.names.ag}}</code></li>
+            <li><span class="ui">Resource group</span>: <code>{{c.names.rg}}</code></li>
+            <li><span class="ui">Severity</span>: <span class="ui">1 - Error</span></li>
+            <li><span class="ui">Alert rule name</span>: <code>{{c.names.alertHealthNs}}</code></li>
+          </ul>
+          Clique em <span class="ui">Review + create</span> › <span class="ui">Create</span>.</li>
+        <li>Abra <span class="path">Monitor › Alerts › Alert rules</span> e confira a regra com <span class="ui">Status</span> <span class="ui">Enabled</span>.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>FW_NS_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwNs}} --query id -o tsv)
+AG_ID=$(az monitor action-group show -g {{c.names.rg}} -n {{c.names.ag}} --query id -o tsv)
+
+az monitor metrics alert create \
+  -g {{c.names.rg}} \
+  -n {{c.names.alertHealthNs}} \
+  --scopes "$FW_NS_ID" \
+  --condition "avg {{c.alerts.health.metric}} &lt; {{c.alerts.health.threshold}}" \
+  --window-size 5m \
+  --evaluation-frequency 1m \
+  --severity {{c.alerts.health.severity}} \
+  --action "$AG_ID" \
+  --description "Firewall health on {{c.names.fwNs}}"</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> a regra aparece habilitada em <span class="path">Monitor › Alerts › Alert rules</span>. Ela é de prevenção: não tente derrubar o health do firewall para vê-la disparar.</p>
+    </div>
+    {{kql:ex5-metricas}}
+  </article>
+
+  <article class="step" id="ex5-5" data-nav="5.5 Saúde, latência e capacidade">
+    <h3>5.5 · Ler saúde, latência e capacidade do firewall</h3>
+    <p class="what"><strong>O que:</strong> compare, nos dois firewalls, <span class="ui">Firewall health state</span> com as dimensões <span class="ui">Status</span> e <span class="ui">Reason</span>, <span class="ui">Latency Probe</span> e <span class="ui">Observed Capacity Units</span>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> são os primeiros sinais quando alguém diz "a rede está lenta". O <span class="ui">Latency Probe</span> estima a latência média <strong>do próprio firewall</strong>, em milissegundos; ele não mede o caminho fim a fim do usuário até o destino. A dimensão <span class="ui">Reason</span> do health diz por que o firewall saiu de 100%, por exemplo SNAT. <span class="ui">Observed Capacity Units</span> mostra quanto o serviço escalou.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Firewalls › {{c.names.fwNs}} › Monitoring › Metrics</span> e ajuste o intervalo para <span class="ui">Last 4 hours</span>.</li>
+        <li><strong>Health.</strong> Em <span class="ui">Metric</span>, escolha <span class="ui">Firewall health state</span> (<span class="ui">Avg</span>). Clique em <span class="ui">Apply splitting</span> por <span class="ui">Status</span> e depois troque para <span class="ui">Reason</span>.</li>
+        <li><strong>Latência e capacidade.</strong> Clique em <span class="ui">+ New chart</span> e escolha <span class="ui">Latency Probe</span> (<span class="ui">Avg</span>). Faça outro gráfico com <span class="ui">Observed Capacity Units</span>.</li>
+        <li>Repita em <span class="path">Firewalls › {{c.names.fwEw}} › Monitoring › Metrics</span> e compare os dois.</li>
+        <li>Opcional: rode de novo a consulta do passo 5.4, que também traz essas métricas exportadas para o workspace.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>FW_NS_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwNs}} --query id -o tsv)
+az monitor metrics list \
+  --resource "$FW_NS_ID" \
+  --metrics FirewallHealth FirewallLatencyPng ObservedCapacity \
+  --interval PT5M \
+  --offset 4h \
+  -o table</code></pre>
+      <pre class="code" data-lang="bash"><code>az monitor metrics list \
+  --resource "$FW_NS_ID" \
+  --metrics FirewallHealth \
+  --filter "Status eq '*' and Reason eq '*'" \
+  --interval PT5M \
+  --offset 4h \
+  -o table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> em condição normal, o health fica em 100% com <span class="ui">Status</span> <span class="ui">Healthy</span>; a latência e a capacidade ficam estáveis. Anote os valores dos dois firewalls: eles são a sua linha de base para comparar num incidente. Um pico de latência que coincide com reclamação de lentidão é motivo para abrir chamado; latência baixa no firewall com usuário reclamando aponta para outro trecho do caminho.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex5-c5" data-nav="Checkpoint C5">
+    <h3>Checkpoint C5</h3>
+    <p>Execute o checkpoint para confirmar <code>{{c.names.ag}}</code>, os dois alertas e pelo menos um disparo do alerta de deny.</p>
+    <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C5</code></pre>
+    <p>Critério de avanço: <code>{{c.names.alertAppDeny}}</code> tem histórico de disparo, e o alerta <code>{{c.names.alertHealthNs}}</code> existe e está habilitado.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-title">O que você aprendeu</p>
+    <ul>
+      <li>Métrica é o caminho certo quando o sinal já existe, precisa de baixa latência e não exige KQL avançado.</li>
+      <li>Teste do Action Group valida o canal (e não roda em Free Trial); disparo real exige gerar a condição do alerta.</li>
+      <li>Severidade deve refletir impacto operacional: deny didático em severity <code>{{c.alerts.appDeny.severity}}</code> e health em <code>{{c.alerts.health.severity}}</code>.</li>
+      <li>Ruído importa: filtros de dimensão reduzem falsos positivos, mas precisam existir na série temporal.</li>
+      <li>O próximo passo de maturidade é trocar notificação pura por ação automatizada controlada, como webhook, Logic App ou runbook com aprovação e rollback.</li>
+    </ul>
+  </div>
+
+  <p class="refs">Referências validadas: <a href="https://learn.microsoft.com/azure/firewall/monitor-firewall-reference" target="_blank" rel="noopener">Azure Firewall monitoring data reference</a>, <a href="https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-create-metric-alert-rule" target="_blank" rel="noopener">Create or edit a metric alert rule</a>, <a href="https://learn.microsoft.com/azure/azure-monitor/alerts/action-groups" target="_blank" rel="noopener">Action groups</a>, <a href="https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-types#monitor-multiple-resources-with-one-alert-rule" target="_blank" rel="noopener">Metric alerts multi-resource support</a>.</p>
+</section>

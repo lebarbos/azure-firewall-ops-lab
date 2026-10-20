@@ -1,0 +1,326 @@
+<section class="chapter" id="ex1" data-title="Ex1 · Observabilidade e primeiras regras">
+  <h2>Ex1 · Observabilidade e primeiras regras</h2>
+  <p class="meta">75 min · Checkpoint C1</p>
+  <p>Objetivo: habilitar logs estruturados nos dois firewalls, observar o default deny, criar os objetos base e permitir apenas os fluxos necessários para o restante do lab.</p>
+  <div class="callout note">
+    <p class="callout-title">Fontes usadas neste exercício</p>
+    <p>Os passos de logs estruturados e workbook seguem <a href="https://learn.microsoft.com/en-us/azure/firewall/monitor-firewall" target="_blank" rel="noopener">Monitor Azure Firewall</a>, <a href="https://learn.microsoft.com/en-us/azure/firewall/monitor-firewall-reference" target="_blank" rel="noopener">Azure Firewall monitoring data reference</a> e <a href="https://learn.microsoft.com/en-us/azure/firewall/firewall-workbook" target="_blank" rel="noopener">Use Azure Firewall workbooks</a>. O comportamento de default deny e a ordem DNAT → Network → Application vêm de <a href="https://learn.microsoft.com/en-us/azure/firewall/rule-processing" target="_blank" rel="noopener">Configure Azure Firewall rules</a>.</p>
+  </div>
+
+  <article class="step" id="ex1-1" data-nav="1.1 Diagnostics e Policy Analytics">
+    <h3>1.1 · Configurar diagnostic settings e Policy Analytics</h3>
+    <p class="what"><strong>O que:</strong> envie logs estruturados e métricas de <code>{{c.names.fwEw}}</code> e <code>{{c.names.fwNs}}</code> para <code>{{c.names.law}}</code> e habilite o Policy Analytics em <code>{{c.names.polNs}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o lab depende das tabelas resource-specific <code>AZFW*</code>. Elas preservam colunas como action, rule collection group, collection e rule, que tornam a investigação muito mais direta que o formato legado em <code>AzureDiagnostics</code>.</p>
+      <p>O <strong>Policy Analytics</strong> é habilitado agora, mas só será lido no Ex4: ele só analisa o tráfego que passa <strong>depois</strong> de habilitado e agrega os dados de hora em hora. Ele depende das categorias de agregação (<code>AZFW*Aggregation</code>) deste mesmo diagnostic setting. Custa cerca de US$ {{c.cost.items.5.usdPerHour}}/h por policy, por isso o lab habilita só na policy N-S, onde ficam o Ex2 e o Ex3.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Firewalls › {{c.names.fwEw}} › Monitoring › Diagnostic settings</span>.</li>
+        <li>Clique em <span class="ui">+ Add diagnostic setting</span> e use o nome <code>{{c.names.diag}}</code>.</li>
+        <li>Marque as categorias estruturadas mínimas: <code>{{c.diagnostics.requiredCategories}}</code>.</li>
+        <li>Se aparecerem outras categorias <code>AZFW*</code>, como DNS, você pode marcá-las para investigação extra. Não marque agora a categoria de flow trace (<code>{{c.diagnostics.flowTrace.category}}</code>): ela fica vazia até registrar um recurso na assinatura, o que é feito no bônus 2.3. Não marque as categorias legadas que gravam em <code>AzureDiagnostics</code> neste lab; misturar formatos exige settings separados e confunde as consultas.</li>
+        <li>Marque <span class="ui">AllMetrics</span>.</li>
+        <li>Em destino, marque <span class="ui">Send to Log Analytics workspace</span>, selecione <code>{{c.names.law}}</code> e escolha <span class="ui">Resource specific</span> em <span class="ui">Destination table</span>.</li>
+        <li>Clique em <span class="ui">Save</span>.</li>
+        <li>Repita os passos 1 a 7 em <span class="path">Firewalls › {{c.names.fwNs}} › Monitoring › Diagnostic settings</span>, com o mesmo nome <code>{{c.names.diag}}</code>, as mesmas categorias e o mesmo workspace.</li>
+        <li><strong>Habilite o Policy Analytics.</strong> Abra <span class="path">Firewall Policies › {{c.names.polNs}} › Monitoring › Policy Analytics</span> e clique em <span class="ui">Configure Workspaces</span>:
+          <ul>
+            <li><span class="ui">Enable Policy Analytics</span>: marcado</li>
+            <li>Workspace: <code>{{c.names.law}}</code>, o mesmo dos diagnostic settings</li>
+          </ul>
+          Clique em <span class="ui">Save</span>. A tela continua vazia até a primeira agregação, cerca de 60 min depois; os dados são lidos no Ex4.</li>
+      </ol>
+      <div class="callout warn">
+        <p class="callout-title">Não esqueça o firewall N-S</p>
+        <p>O diagnostic setting é configurado <strong>por firewall</strong>. Ao terminar o <code>{{c.names.fwEw}}</code>, faça o mesmo no <code>{{c.names.fwNs}}</code>. Sem isso, as consultas de saída para a Internet e de application rules voltam vazias nos próximos exercícios.</p>
+      </div>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>FW_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwEw}} --query id -o tsv)
+LAW_ID=$(az monitor log-analytics workspace show -g {{c.names.rg}} -n {{c.names.law}} --query id -o tsv)
+az monitor diagnostic-settings create \
+  --name {{c.names.diag}} \
+  --resource "$FW_ID" \
+  --workspace "$LAW_ID" \
+  --export-to-resource-specific true \
+  --logs '[{"category":"AZFWNetworkRule","enabled":true},{"category":"AZFWApplicationRule","enabled":true},{"category":"AZFWNatRule","enabled":true},{"category":"AZFWThreatIntel","enabled":true},{"category":"AZFWIdpsSignature","enabled":true},{"category":"AZFWNetworkRuleAggregation","enabled":true},{"category":"AZFWApplicationRuleAggregation","enabled":true},{"category":"AZFWNatRuleAggregation","enabled":true}]' \
+  --metrics '[{"category":"AllMetrics","enabled":true}]'</code></pre>
+      <pre class="code" data-lang="bash"><code>FW_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwNs}} --query id -o tsv)
+LAW_ID=$(az monitor log-analytics workspace show -g {{c.names.rg}} -n {{c.names.law}} --query id -o tsv)
+az monitor diagnostic-settings create \
+  --name {{c.names.diag}} \
+  --resource "$FW_ID" \
+  --workspace "$LAW_ID" \
+  --export-to-resource-specific true \
+  --logs '[{"category":"AZFWNetworkRule","enabled":true},{"category":"AZFWApplicationRule","enabled":true},{"category":"AZFWNatRule","enabled":true},{"category":"AZFWThreatIntel","enabled":true},{"category":"AZFWIdpsSignature","enabled":true},{"category":"AZFWNetworkRuleAggregation","enabled":true},{"category":"AZFWApplicationRuleAggregation","enabled":true},{"category":"AZFWNatRuleAggregation","enabled":true}]' \
+  --metrics '[{"category":"AllMetrics","enabled":true}]'</code></pre>
+      <pre class="code" data-lang="bash"><code># Policy Analytics na policy N-S (generic update: o az não tem flag própria para insights).
+POL_ID=$(az network firewall policy show -g {{c.names.rg}} -n {{c.names.polNs}} --query id -o tsv)
+LAW_ID=$(az monitor log-analytics workspace show -g {{c.names.rg}} -n {{c.names.law}} --query id -o tsv)
+az resource update --ids "$POL_ID" \
+  --set properties.insights.isEnabled=true \
+        properties.insights.retentionDays=30 \
+        properties.insights.logAnalyticsResources.defaultWorkspaceId.id="$LAW_ID" \
+  -o none</code></pre>
+      <pre class="code" data-lang="bash"><code># Opcional: veja todas as categorias disponíveis no seu recurso antes de salvar.
+FW_ID=$(az network firewall show -g {{c.names.rg}} -n {{c.names.fwNs}} --query id -o tsv)
+az monitor diagnostic-settings categories list --resource "$FW_ID" -o table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> cada firewall tem um diagnostic setting chamado <code>{{c.names.diag}}</code>, destino <code>{{c.names.law}}</code>, tabela <strong>Resource specific</strong> e <code>{{c.diagnostics.metrics}}</code>. As tabelas <code>AZFW*</code> normalmente aparecem depois de novos eventos e ingestão, em cerca de 5 a 15 min. Em <code>{{c.names.polNs}}</code>, a tela de Policy Analytics mostra o workspace <code>{{c.names.law}}</code> configurado.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex1-2" data-nav="1.2 Teste inicial e rotas">
+    <h3>1.2 · Testar antes das regras e comparar rotas efetivas</h3>
+    <p class="what"><strong>O que:</strong> acesse a VM-A via Bastion, gere tráfego que deve ser negado e confira as rotas efetivas da NIC A.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> Bastion funciona sem regra de Azure Firewall porque o caminho administrativo usa peering entre a VNet N-S e o spoke. Já o tráfego A↔B e Internet cruza os firewalls e, sem regras, cai no default deny.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Virtual machines › {{c.names.vmA}} › Connect › Bastion</span>.</li>
+        <li>Use o usuário <code>{{c.vm.adminUsername}}</code> e a senha criada no Ex0.</li>
+        <li>Dentro da VM, abra <span class="path">Start › Windows PowerShell</span> e execute os comandos abaixo.</li>
+        <li>Depois, compare as rotas em <span class="path">Virtual machines › {{c.names.vmA}} › Networking › Network interface › Effective routes</span> com a tabela da seção Arquitetura.</li>
+      </ol>
+      <pre class="code" data-lang="powershell"><code>ping {{c.network.vmBIp}}
+Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}
+Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing
+curl.exe --connect-timeout 10 --max-time 20 http://{{c.network.vmBIp}}/</code></pre>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  -g {{c.names.rg}} \
+  -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'ping {{c.network.vmBIp}}; Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}; try { Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 20 } catch { $_.Exception.Message }; curl.exe --connect-timeout 10 --max-time 20 http://{{c.network.vmBIp}}/' \
+  --query "value[0].message" \
+  -o tsv</code></pre>
+      <pre class="code" data-lang="bash"><code>az network nic show-effective-route-table \
+  -g {{c.names.rg}} \
+  -n {{c.names.nicA}} \
+  -o table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> Bastion conecta, mas <code>ping</code>, <code>Test-NetConnection</code>, <code>Invoke-WebRequest</code> e o <code>curl.exe</code> HTTP ainda falham ou retornam negação. Nas rotas, você deve reconhecer o prefixo local <code>{{c.network.vnetA}}</code>, o peering para <code>{{c.network.vnetNs}}</code>, os ranges privados aprendidos pelo hub e <code>0.0.0.0/0</code> apontando para o firewall N-S.</p>
+    </div>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>Por que o RDP via Bastion funciona sem nenhuma regra de Azure Firewall?</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p>Porque a administração entra pelo Bastion em <code>{{c.names.vnetNs}}</code> e chega à VM-A pelo peering com <code>{{c.names.vnetA}}</code>. Esse caminho não passa pelo firewall do hub nem pelo firewall N-S. O objetivo é separar acesso administrativo do fluxo que será inspecionado no exercício.</p>
+      <p>Referência: <a href="https://learn.microsoft.com/en-us/azure/bastion/vnet-peering" target="_blank" rel="noopener">VNet peering and Azure Bastion architecture</a>.</p>
+    </details>
+  </article>
+
+  <article class="step" id="ex1-3" data-nav="1.3 Criar IP Groups">
+    <h3>1.3 · Criar os IP Groups do baseline</h3>
+    <p class="what"><strong>O que:</strong> crie três IP Groups para representar Workload A, Workload B e spokes.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> IP Groups simplificam regras de Azure Firewall: podem ser origem em regras de aplicação, origem/destino em regras de rede e origem em DNAT. Se um grupo em uso ficar vazio, a regra é ignorada; por isso o checkpoint também verifica membros.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">IP Groups › + Create</span>.</li>
+        <li>Crie <code>{{c.names.ipgWlA}}</code> no Resource Group <code>{{c.names.rg}}</code>, na mesma região do RG, com <code>{{c.ipGroupCidrs.ipgWlA}}</code>.</li>
+        <li>Crie <code>{{c.names.ipgWlB}}</code> com <code>{{c.ipGroupCidrs.ipgWlB}}</code>.</li>
+        <li>Crie <code>{{c.names.ipgSpokes}}</code> com <code>{{c.ipGroupCidrs.ipgSpokes}}</code>.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>REGION=$(az group show -n {{c.names.rg}} --query location -o tsv)
+az network ip-group create \
+  -g {{c.names.rg}} \
+  -n {{c.names.ipgWlA}} \
+  -l "$REGION" \
+  --ip-addresses {{c.network.snetA}}</code></pre>
+      <pre class="code" data-lang="bash"><code>REGION=$(az group show -n {{c.names.rg}} --query location -o tsv)
+az network ip-group create \
+  -g {{c.names.rg}} \
+  -n {{c.names.ipgWlB}} \
+  -l "$REGION" \
+  --ip-addresses {{c.network.snetB}}</code></pre>
+      <pre class="code" data-lang="bash"><code>REGION=$(az group show -n {{c.names.rg}} --query location -o tsv)
+az network ip-group create \
+  -g {{c.names.rg}} \
+  -n {{c.names.ipgSpokes}} \
+  -l "$REGION" \
+  --ip-addresses {{c.network.snetA}} {{c.network.snetB}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> os três IP Groups existem, estão no mesmo Resource Group do lab e têm exatamente os CIDRs do contrato.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex1-4" data-nav="1.4 Criar regras baseline">
+    <h3>1.4 · Criar as primeiras regras</h3>
+    <p class="what"><strong>O que:</strong> crie um baseline E-W para ICMP/RDP e um baseline N-S para FQDNs Microsoft.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> Azure Firewall processa DNAT, depois Network e depois Application. Neste exercício, o E-W usa regra Network para tráfego entre spokes, e a saída N-S usa regra Application por FQDN. As prioridades do contrato deixam espaço para os experimentos posteriores.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Firewall Policies › {{c.names.polEw}} › Rules › Rule collections</span>.</li>
+        <li>Clique em <span class="ui">+ Add › Rule collection group</span>, use o nome <code>{{c.rcg.baselineEw.name}}</code> e a prioridade <code>{{c.rcg.baselineEw.priority}}</code> e clique em <span class="ui">Add</span>.</li>
+        <li>Clique em <span class="ui">+ Add › Rule collection</span>: nome <code>{{c.rc.netBaselineEw.name}}</code>, tipo <span class="ui">Network</span>, prioridade <code>{{c.rc.netBaselineEw.priority}}</code>, ação <span class="ui">Allow</span> e, em <span class="ui">Rule collection group</span>, <code>{{c.rcg.baselineEw.name}}</code>.</li>
+        <li>No mesmo formulário, crie a regra <code>{{c.rules.allowIcmp}}</code>: protocolo ICMP, origem <code>{{c.names.ipgSpokes}}</code>, destino <code>{{c.names.ipgSpokes}}</code>, portas <code>*</code>.</li>
+        <li>Crie também a regra <code>{{c.rules.allowRdp}}</code>: protocolo TCP, porta <code>{{c.targets.rdpPort}}</code>, origem <code>{{c.names.ipgSpokes}}</code>, destino <code>{{c.names.ipgSpokes}}</code>. Clique em <span class="ui">Add</span>.</li>
+        <li>Abra <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span>.</li>
+        <li>Clique em <span class="ui">+ Add › Rule collection group</span>, use o nome <code>{{c.rcg.baselineNs.name}}</code> e a prioridade <code>{{c.rcg.baselineNs.priority}}</code> e clique em <span class="ui">Add</span>.</li>
+        <li>Clique em <span class="ui">+ Add › Rule collection</span>: nome <code>{{c.rc.appBaseline.name}}</code>, tipo <span class="ui">Application</span>, prioridade <code>{{c.rc.appBaseline.priority}}</code>, ação <span class="ui">Allow</span> e, em <span class="ui">Rule collection group</span>, <code>{{c.rcg.baselineNs.name}}</code>.</li>
+        <li>No mesmo formulário, crie a regra <code>{{c.rules.allowMicrosoft}}</code>: origem <code>{{c.names.ipgSpokes}}</code>, protocolos HTTP:80 e HTTPS:443, destino FQDN <code>{{c.targets.baselineFqdn}}</code>. Clique em <span class="ui">Add</span>.</li>
+        <li>Aguarde o provisioning da policy voltar para <span class="ui">Succeeded</span> e mais 1–2 minutos para propagação.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>IPG_SPOKES_ID=$(az network ip-group show -g {{c.names.rg}} -n {{c.names.ipgSpokes}} --query id -o tsv)
+az network firewall policy rule-collection-group create \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polEw}} \
+  --name {{c.rcg.baselineEw.name}} \
+  --priority {{c.rcg.baselineEw.priority}}
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polEw}} \
+  --rule-collection-group-name {{c.rcg.baselineEw.name}} \
+  --name {{c.rc.netBaselineEw.name}} \
+  --action Allow \
+  --collection-priority {{c.rc.netBaselineEw.priority}} \
+  --rule-name {{c.rules.allowIcmp}} \
+  --rule-type NetworkRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --destination-ip-groups "$IPG_SPOKES_ID" \
+  --ip-protocols ICMP \
+  --destination-ports "*"
+az network firewall policy rule-collection-group collection rule add \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polEw}} \
+  --rule-collection-group-name {{c.rcg.baselineEw.name}} \
+  --name {{c.rc.netBaselineEw.name}} \
+  --rule-name {{c.rules.allowRdp}} \
+  --rule-type NetworkRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --destination-ip-groups "$IPG_SPOKES_ID" \
+  --ip-protocols TCP \
+  --destination-ports {{c.targets.rdpPort}}</code></pre>
+      <pre class="code" data-lang="bash"><code>IPG_SPOKES_ID=$(az network ip-group show -g {{c.names.rg}} -n {{c.names.ipgSpokes}} --query id -o tsv)
+az network firewall policy rule-collection-group create \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polNs}} \
+  --name {{c.rcg.baselineNs.name}} \
+  --priority {{c.rcg.baselineNs.priority}}
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polNs}} \
+  --rule-collection-group-name {{c.rcg.baselineNs.name}} \
+  --name {{c.rc.appBaseline.name}} \
+  --action Allow \
+  --collection-priority {{c.rc.appBaseline.priority}} \
+  --rule-name {{c.rules.allowMicrosoft}} \
+  --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --protocols Http=80 Https=443 \
+  --target-fqdns '{{c.targets.baselineFqdn}}'</code></pre>
+      <pre class="code" data-lang="bash"><code>az network firewall policy wait -g {{c.names.rg}} -n {{c.names.polEw}} --updated --interval 30 --timeout 1800
+az network firewall policy wait -g {{c.names.rg}} -n {{c.names.polNs}} --updated --interval 30 --timeout 1800
+sleep 120</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> os dois RCGs existem com prioridade <code>{{c.rcg.baselineEw.priority}}</code>/<code>{{c.rcg.baselineNs.priority}}</code>, as collections têm prioridade <code>{{c.rc.netBaselineEw.priority}}</code>/<code>{{c.rc.appBaseline.priority}}</code> e as regras usam os IP Groups, não CIDRs digitados manualmente. Espere o firewall/policy voltar a <code>Succeeded</code> e mais 1 a 2 minutos antes de testar.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex1-5" data-nav="1.5 Novo teste">
+    <h3>1.5 · Repetir os testes depois das regras</h3>
+    <p class="what"><strong>O que:</strong> confirme que os fluxos permitidos passaram e que o restante continua negado.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o objetivo não é abrir Internet genericamente. O baseline permite ICMP/RDP entre spokes e FQDNs Microsoft pela regra de aplicação; <code>{{c.targets.bing}}</code> continua fora do escopo.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Na sessão Bastion da VM-A, abra <span class="path">Start › Windows PowerShell</span>.</li>
+        <li>Execute os testes abaixo.</li>
+        <li>Para RDP A→B, rode <code>mstsc /v:{{c.network.vmBIp}}</code> dentro da VM-A e autentique com <code>{{c.vm.adminUsername}}</code>.</li>
+      </ol>
+      <pre class="code" data-lang="powershell"><code>ping {{c.network.vmBIp}}
+Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}
+Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing
+Invoke-WebRequest https://{{c.targets.bing}} -UseBasicParsing</code></pre>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  -g {{c.names.rg}} \
+  -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'ping {{c.network.vmBIp}}; Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}; try { Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Message }; try { Invoke-WebRequest https://{{c.targets.bing}} -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Message }' \
+  --query "value[0].message" \
+  -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> ping e RDP A↔B funcionam, <code>{{c.targets.learn}}</code> funciona por corresponder a <code>{{c.targets.baselineFqdn}}</code>, e <code>{{c.targets.bing}}</code> continua negado. Se algo falhar, gere novo tráfego depois de aguardar propagação e confira o log antes de editar regra.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex1-6" data-nav="1.6 KQL e workbook">
+    <h3>1.6 · Ler as decisões com KQL e workbook</h3>
+    <p class="what"><strong>O que:</strong> use três consultas KQL e o workbook embutido para explicar qual firewall decidiu cada fluxo.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o workbook é ótimo para exploração visual, mas a prova do exercício é a combinação de timestamp, firewall, origem, destino/FQDN, ação, policy, RCG, collection e regra.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Log Analytics workspaces › {{c.names.law}} › Logs</span>.</li>
+        <li>Cole cada consulta abaixo e ajuste apenas a janela de tempo, se necessário.</li>
+        <li>Depois abra <span class="path">Firewalls › {{c.names.fwNs}} › Monitoring › Workbooks</span> e escolha o workbook do Azure Firewall na galeria.</li>
+        <li>No workbook, selecione o workspace <code>{{c.names.law}}</code> e os firewalls <code>{{c.names.fwNs}}</code> e <code>{{c.names.fwEw}}</code>.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">O caminho principal é Portal porque o objetivo é ensinar leitura de logs e workbook. Se o instrutor quiser automatizar a consulta, use <code>az monitor log-analytics query</code> depois de confirmar a extensão e o workspace no seu ambiente.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> em <code>ex1-allow-deny</code>, compare Allow × Deny por <code>_ResourceId</code> para separar E-W de N-S. Em <code>ex1-default-deny</code>, procure negações sem regra casada para identificar default deny. Em <code>ex1-timeline</code>, leia a sequência recente e responda: qual firewall decidiu, por qual policy/RCG/collection/rule e por quê.</p>
+    </div>
+    {{kql:ex1-allow-deny}}
+    {{kql:ex1-default-deny}}
+    {{kql:ex1-timeline}}
+    <div class="callout tip">
+      <p class="callout-title">O que olhar no workbook</p>
+      <p>Use <strong>Overview</strong> para volume e ações por tempo, <strong>Application rules</strong> para FQDNs permitidos/negados, <strong>Network rules</strong> para ICMP/RDP e portas, e <strong>Investigations</strong> para correlacionar origem e destino. Se o workbook estiver vazio, volte ao diagnostic setting, gere tráfego novo e aguarde ingestão.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex1-c1" data-nav="Checkpoint C1">
+    <h3>Checkpoint C1 · Observabilidade e baseline</h3>
+    <pre class="code" data-lang="bash"><code>cd ~/{{c.repo.cloneDir}}
+./scripts/checkpoint.sh C1</code></pre>
+    <p>O C1 verifica: diagnostic setting nos dois firewalls em modo Resource specific para <code>{{c.names.law}}</code>, Policy Analytics habilitado em <code>{{c.names.polNs}}</code> com o workspace do lab, três IP Groups criados, <code>{{c.rcg.baselineEw.name}}</code> nas duas policies e KQL com pelo menos um Allow e um Deny nos últimos 30 minutos.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-title">O que você aprendeu</p>
+    <ul>
+      <li>Bastion via peering é caminho administrativo e não prova regra de firewall.</li>
+      <li>Sem regra, Azure Firewall nega por padrão; o log estruturado mostra o motivo.</li>
+      <li>IP Groups reduzem repetição e viram objetos reutilizáveis nas regras.</li>
+      <li>Network rules e Application rules têm papéis diferentes; abrir FQDN não é o mesmo que liberar 443 para qualquer destino.</li>
+      <li>Workbook mostra tendências; KQL mostra a decisão exata que sustenta o troubleshooting.</li>
+    </ul>
+  </div>
+</section>

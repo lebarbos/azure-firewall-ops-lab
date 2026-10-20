@@ -1,0 +1,139 @@
+<section class="chapter" id="cleanup" data-title="Cleanup verificado">
+  <h2>Cleanup verificado</h2>
+  <p class="meta">⏱ 15 min · Checkpoint CX</p>
+
+  <div class="callout danger">
+    <p class="callout-title">Obrigatório antes de encerrar</p>
+    <p>O ambiente esquecido ligado custa cerca de <strong>US$ {{c.cost.forgottenUsdPerDay}} por dia</strong>. Pedir a exclusão não prova que o cleanup terminou: a exclusão do resource group é assíncrona e alguns objetos, como Key Vault em soft-delete, podem continuar ocupando o nome até o purge.</p>
+  </div>
+
+  <article class="step" id="cleanup-1" data-nav="1 · Executar cleanup.sh">
+    <h3>1 · Execute o cleanup automatizado</h3>
+    <p class="what"><strong>O que:</strong> rode o script que exclui o resource group, espera a exclusão terminar, faz purge dos Key Vaults do Ex6 e procura recursos remanescentes pela tag do lab.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o lab combina recursos caros no resource group <code>{{c.names.rg}}</code> com objetos globais de Key Vault criados no Ex6. Um delete solicitado e ainda em progresso continua sendo risco de custo ou de bloqueio de nome.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Use o Cloud Shell em Bash, no clone do lab: <code>~/{{c.repo.cloneDir}}</code>.</li>
+        <li>Execute o script abaixo. Ele confirma a exclusão, dispara o delete do RG com operação assíncrona, faz polling até o RG desaparecer, procura Key Vaults apagados com prefixo <code>{{c.names.kvPrefix}}</code> e faz purge quando permitido, depois lista qualquer recurso ainda marcado com <code>workshop={{c.tags.workshop}}</code>.</li>
+      </ol>
+      <pre class="code" data-lang="bash"><code>./scripts/cleanup.sh</code></pre>
+    </div>
+    <div class="callout warn">
+      <p class="callout-title">Se o Cloud Shell desconectar durante a espera</p>
+      <p>A exclusão do hub e dos firewalls pode passar de 20 minutos, e o Cloud Shell encerra sessões sem interação após 20 minutos. A exclusão continua no Azure. Reabra o Cloud Shell, volte ao clone (ou clone de novo, veja <a href="#ts-cloudshell">Cloud Shell caiu</a>) e rode <code>./scripts/cleanup.sh</code> outra vez: o script detecta a exclusão em andamento e retoma a espera.</p>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code># Modo não interativo, útil quando o instrutor já confirmou verbalmente.
+./scripts/cleanup.sh --yes</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o script só deve encerrar com sucesso depois de confirmar que <code>{{c.names.rg}}</code> não existe, que não há Key Vault apagado com prefixo <code>{{c.names.kvPrefix}}</code> que possa ser purgado por você e que a varredura por tag não encontrou recursos do lab.</p>
+    </div>
+  </article>
+
+  <article class="step" id="cleanup-2" data-nav="2 · Alternativa pelo Portal">
+    <h3>2 · Alternativa pelo Portal</h3>
+    <p class="what"><strong>O que:</strong> se o script não estiver disponível, remova o resource group e purgue manualmente os Key Vaults apagados do Ex6.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o Portal ajuda a visualizar o estado, mas ele também inicia operações assíncronas. Você precisa confirmar o estado final, não apenas clicar em <span class="ui">Delete</span>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Resource groups › {{c.names.rg}} › Overview</span>.</li>
+        <li>Clique em <span class="ui">Delete resource group</span>, digite <code>{{c.names.rg}}</code> e confirme. Aguarde até o RG não aparecer mais na lista.</li>
+        <li>Abra <span class="path">Key vaults</span>, sem entrar em um vault específico, e selecione <span class="ui">Manage deleted vaults</span>.</li>
+        <li>Filtre pela assinatura e procure nomes que comecem com <code>{{c.names.kvPrefix}}</code> e que vieram do resource group <code>{{c.names.rg}}</code>. O prefixo é o padrão do Portal, então pode haver vaults de outros projetos com o mesmo início: não purgue esses. Se aparecerem e você tiver permissão, selecione e clique em <span class="ui">Purge</span>.</li>
+        <li>Em <span class="path">All resources</span>, filtre por tag <code>workshop</code> igual a <code>{{c.tags.workshop}}</code>. A lista deve ficar vazia para os recursos do lab.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Esta é a alternativa pelo Portal. Use o próximo passo para o equivalente por CLI.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o RG ausente depois do cleanup é <strong>status correto</strong>. Não é motivo para novo deploy. Se você precisar retomar o lab depois de limpar, comece novamente pelo Ex0 em uma nova sessão.</p>
+    </div>
+  </article>
+
+  <article class="step" id="cleanup-3" data-nav="3 · Alternativa por CLI">
+    <h3>3 · Alternativa por CLI</h3>
+    <p class="what"><strong>O que:</strong> use comandos equivalentes ao script quando precisar diagnosticar uma falha ou repetir uma etapa específica.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> estes comandos deixam claro o contrato do cleanup: excluir o RG, esperar até <code>az group exists</code> retornar <code>false</code>, purgar Key Vaults soft-deleted e varrer recursos por tag.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <p>Se estiver usando apenas Portal, siga o passo anterior. Antes de colar comandos, confirme a sintaxe atual com <code>--help</code>, especialmente em ambientes com versões diferentes do Azure CLI.</p>
+    </div>
+    <details class="cli" open>
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code># 1) Excluir o resource group de forma assíncrona.
+az group delete --name {{c.names.rg}} --yes --no-wait
+
+# 2) Esperar até o Azure informar que o RG não existe mais.
+while [ "$(az group exists --name {{c.names.rg}} -o tsv)" = "true" ]; do
+  echo "Aguardando exclusão de {{c.names.rg}}..."
+  sleep 30
+done
+
+# 3) Listar Key Vaults soft-deleted criados pelo Ex6.
+az keyvault list-deleted --resource-type vault \
+  --query "[?starts_with(name, '{{c.names.kvPrefix}}') &amp;&amp; contains(properties.vaultId, '/resourceGroups/{{c.names.rg}}/')].{name:name,location:properties.location}" \
+  -o table
+
+# 4) Purgar cada vault listado, se purge protection não bloquear e se você tiver permissão.
+az keyvault list-deleted --resource-type vault \
+  --query "[?starts_with(name, '{{c.names.kvPrefix}}') &amp;&amp; contains(properties.vaultId, '/resourceGroups/{{c.names.rg}}/')].[name,properties.location]" -o tsv |
+while read -r KV_NAME KV_LOCATION; do
+  az keyvault purge --name "$KV_NAME" --location "$KV_LOCATION"
+done
+
+# 5) Varredura final por tag do workshop.
+az resource list --tag workshop={{c.tags.workshop}} \
+  --query "[].{name:name,type:type,resourceGroup:resourceGroup,location:location}" \
+  -o table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> <code>az group exists --name {{c.names.rg}}</code> retorna <code>false</code> e <code>az resource list --tag workshop={{c.tags.workshop}}</code> não mostra recursos do lab.</p>
+    </div>
+  </article>
+
+  <article class="step" id="cleanup-4" data-nav="4 · O que pode sobrar">
+    <h3>4 · Entenda o que pode sobrar fora do RG</h3>
+    <p class="what"><strong>O que:</strong> diferencie sobra cobrável do lab, estado soft-deleted e artefatos gratuitos/externos ao lab.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> nem todo item que você vê no Portal foi criado pelo lab ou gera custo relevante. O checkpoint CX foca o contrato do lab: RG inexistente, Key Vault purgado quando aplicável e zero recursos com a tag <code>workshop={{c.tags.workshop}}</code>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ul>
+        <li><strong><code>NetworkWatcherRG</code>:</strong> pode existir porque o Azure cria Network Watcher por região. Ele fica fora do RG do lab e, sozinho, não representa o ambiente do workshop. Se quiser remover, abra <span class="path">Resource groups › NetworkWatcherRG</span> e exclua apenas se souber que não há outros usos na assinatura.</li>
+        <li><strong>Storage do Cloud Shell:</strong> se você escolheu montar storage, ele persiste fora do lab para guardar o <code>clouddrive</code>. Não é excluído pelo cleanup do workshop. Para remover, use <span class="path">Cloud Shell › Settings › Reset user settings</span> e depois exclua manualmente a storage account/fileshare correspondente, se não precisar mais dela.</li>
+        <li><strong>Key Vault com purge protection:</strong> se purge protection estiver habilitado, o purge não pode ser forçado antes do fim da retenção. Registre o nome e purgue depois do fim da retenção.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code># Conferir se há recursos marcados como parte do workshop.
+az resource list --tag workshop={{c.tags.workshop}} -o table
+
+# Conferir Key Vaults apagados que ainda ocupam nome.
+az keyvault list-deleted --resource-type vault -o table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> se sobrar algo fora de <code>{{c.names.rg}}</code>, ele deve ter explicação clara: não é do lab, é gratuito/externo, ou é uma exceção de Key Vault aguardando retenção.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="cleanup-cx" data-nav="Checkpoint CX">
+    <h3>Checkpoint CX</h3>
+    <p>Rode o checkpoint final. Ele confirma o estado, não dispara novo deploy.</p>
+    <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh CX</code></pre>
+    <p><strong>Resultado esperado:</strong> <code>{{c.names.rg}}</code> inexistente, zero recursos com <code>workshop={{c.tags.workshop}}</code> e nenhum Key Vault <code>{{c.names.kvPrefix}}*</code> purgável pendente. Se o RG já estava ausente, isso é sucesso de cleanup, não erro.</p>
+  </div>
+</section>

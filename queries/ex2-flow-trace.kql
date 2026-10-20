@@ -1,0 +1,11 @@
+// Ex2 bônus — Flow trace: o handshake TCP completo do teste RDP E-W (VM-A → VM-B).
+// Tabela: AZFWFlowTrace (só recebe dados depois de registrar AFWEnableTcpConnectionLogging
+// e marcar a categoria no diagnostic setting). Cobre regras de rede e NAT (L3/L4), não Application.
+// Leia Flag na ordem do tempo: SYN-ACK e FIN/FIN-ACK = sessão completa; RST ou INVALID = investigar.
+AZFWFlowTrace
+| where TimeGenerated > ago(1h)
+| where (SourceIp == "10.110.1.4" and DestinationIp == "10.120.1.4") or (SourceIp == "10.120.1.4" and DestinationIp == "10.110.1.4")
+| where DestinationPort == 3389 or SourcePort == 3389
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, SourceIp, SourcePort, DestinationIp, DestinationPort, Protocol, Flag, Action, ActionReason
+| order by TimeGenerated asc

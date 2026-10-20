@@ -1,0 +1,200 @@
+<section class="chapter" id="conceitos" data-title="Conceitos" data-progress="off">
+  <h2>Conceitos</h2>
+  <p class="meta">⏱ 25 min · teoria usada durante o deploy</p>
+
+  <article class="step" id="conceitos-routing-udr" data-nav="Routing Intent × UDR">
+    <h3>Routing Intent × UDR</h3>
+    <p class="what"><strong>O que:</strong> o lab usa Routing Intent no hub para tráfego privado e UDR nas spokes para saída 0/0.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> são mecanismos complementares. O Routing Intent do hub injeta rotas privadas para o secured hub; a UDR local da subnet força Internet para {{c.names.fwNs}}.</p>
+    </div>
+    <div class="portal">
+      <h4>Leitura operacional</h4>
+      <ul>
+        <li>Em {{c.names.vhub}}, a policy {{c.names.routingPolicy}} aponta Private Traffic para {{c.names.fwEw}}.</li>
+        <li>Em {{c.names.rt}}, a rota {{c.names.routeDefault}} aponta 0.0.0.0/0 para o IP privado de {{c.names.fwNs}}.</li>
+        <li><code>disableBgpRoutePropagation=false</code> é intencional: as spokes precisam continuar aprendendo as rotas privadas do hub.</li>
+        <li>Não habilite Internet Routing Intent no hub neste lab; a saída N-S é o ponto de ensino da UDR.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network route-table show \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.rt}} \
+  --query "{disableBgpRoutePropagation:disableBgpRoutePropagation,routes:routes[].{name:name,prefix:addressPrefix,nextHop:nextHopType}}" \
+  --output json</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> rota default para Internet e rotas privadas têm fontes diferentes; não desabilite propagação BGP para "limpar" a tabela.</p>
+    </div>
+  </article>
+
+  <article class="step" id="conceitos-processamento" data-nav="Processamento de regras">
+    <h3>Processamento de regras</h3>
+    <p class="what"><strong>O que:</strong> Azure Firewall Policy avalia tipo de regra antes de prioridade numérica global.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> uma regra Network com número menor não vence um DNAT que casou; uma Application Rule só é avaliada quando não houve match em Network para aquele fluxo aplicável.</p>
+    </div>
+    <figure class="diagram">
+      {{svg:processamento}}
+      <figcaption>Resumo didático da ordem documentada: pai, filha, DNAT, Network, Application; dentro do tipo, prioridade de RCG e RC.</figcaption>
+    </figure>
+    <div class="callout note">
+      <p class="callout-title">Regra que casa termina a avaliação</p>
+      <p>DNAT casado traduz e permite o fluxo sem passar pelas Network Rules. Sem match no fim, o tráfego cai no deny implícito.</p>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem comando único que simule a ordem de avaliação. O lab usa testes e KQL para provar qual regra decidiu cada fluxo.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> antes do Ex2, você consegue ordenar DNAT, Network e Application sem olhar a prioridade numérica da RCG.</p>
+    </div>
+  </article>
+
+  <article class="step" id="conceitos-hierarquia" data-nav="Hierarquia de policies">
+    <h3>Hierarquia de policies</h3>
+    <p class="what"><strong>O que:</strong> no Ex3, {{c.names.polParent}} vira base policy de {{c.names.polEw}} e {{c.names.polNs}}.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> policy pai é ferramenta de governança. Ela deve carregar guardrails, não exceções amplas que furam controles específicos das filhas.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Regra conceitual</th><th>Aplicação no lab</th></tr></thead>
+      <tbody>
+        <tr><td>Pai primeiro</td><td>{{c.rcg.corp.name}} no pai pode decidir antes das RCGs das filhas, mesmo com número maior.</td></tr>
+        <tr><td>NAT não é herdado</td><td>Regras DNAT ficam na policy de cada firewall, nunca no pai. Mostrado na demonstração do instrutor.</td></tr>
+        <tr><td>Threat Intelligence mode é herdado</td><td>A filha só pode ficar mais estrita que a base policy.</td></tr>
+        <tr><td>Mesma região e tier compatível</td><td>O pai é Premium e criado na mesma região das filhas.</td></tr>
+      </tbody>
+    </table>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network firewall policy show \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.polNs}} \
+  --query "{name:name,basePolicy:basePolicy.id,sku:sku.tier}" \
+  --output json</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você não coloca Allow amplo no pai sem discutir impacto sobre Deny das filhas.</p>
+    </div>
+  </article>
+
+  <article class="step" id="conceitos-ipgroups" data-nav="IP Groups">
+    <h3>IP Groups</h3>
+    <p class="what"><strong>O que:</strong> IP Groups dão nomes a conjuntos de endereços usados nas regras.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> no lab, eles reduzem erro de digitação e deixam a intenção visível: workload A, workload B e spokes.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>IP Group</th><th>Conteúdo</th><th>Uso</th></tr></thead>
+      <tbody>
+        <tr><td>{{c.names.ipgWlA}}</td><td>{{c.ipGroupCidrs.ipgWlA.0}}</td><td>Origem/destino da VM-A e subnet A.</td></tr>
+        <tr><td>{{c.names.ipgWlB}}</td><td>{{c.ipGroupCidrs.ipgWlB.0}}</td><td>Origem/destino da VM-B e subnet B.</td></tr>
+        <tr><td>{{c.names.ipgSpokes}}</td><td>{{c.ipGroupCidrs.ipgSpokes}}</td><td>Regras baseline entre spokes.</td></tr>
+      </tbody>
+    </table>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network ip-group list \
+  --resource-group {{c.names.rg}} \
+  --query "[].{name:name,ips:ipAddresses}" \
+  --output table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> a lista mostra os três IP Groups com os CIDRs da tabela.</p>
+    </div>
+  </article>
+
+  <article class="step" id="conceitos-snat-dnat" data-nav="SNAT e DNAT">
+    <h3>SNAT e DNAT</h3>
+    <p class="what"><strong>O que:</strong> a saída N-S do lab usa SNAT. O DNAT, que publica serviços internos no IP público do firewall, não é exercitado no lab: o instrutor mostra em demonstração.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> NAT muda o que cada ponta enxerga. No DNAT, a VM pode ver o IP privado do firewall, não o IP original do cliente.</p>
+    </div>
+    <div class="portal">
+      <h4>Como raciocinar</h4>
+      <ul>
+        <li>Saída: VM → {{c.names.fwNs}} → Internet. O destino vê o IP público do firewall.</li>
+        <li>Entrada (demo): Internet → IP público do firewall:porta → IP privado da VM:porta, registrada em <code>AZFWNatRule</code>.</li>
+        <li>Um DNAT que casa é permitido pela NAT Rule; não é preciso criar uma Network Allow duplicada.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network public-ip show -g {{c.names.rg}} -n {{c.names.pipFw}} --query ipAddress -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você sabe qual IP público os sites da Internet enxergam quando uma VM do lab navega: o do firewall N-S.</p>
+    </div>
+  </article>
+
+  <article class="step" id="conceitos-propagacao" data-nav="Propagação">
+    <h3>Propagação de mudanças</h3>
+    <p class="what"><strong>O que:</strong> mudanças de policy não ficam efetivas instantaneamente no dataplane.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> testar antes de o firewall voltar a <span class="ui">Succeeded</span> gera falso diagnóstico. A regra pode estar salva, mas ainda não aplicada ao tráfego.</p>
+    </div>
+    <div class="portal">
+      <h4>Ritual antes de testar</h4>
+      <ol>
+        <li>Salve a alteração uma vez; evite múltiplos saves concorrentes.</li>
+        <li>Aguarde o firewall associado voltar a <span class="ui">Succeeded</span>.</li>
+        <li>Aguarde mais 1–2 minutos.</li>
+        <li>Gere um fluxo novo. Conexões antigas podem não representar a decisão nova.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network firewall show \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.fwNs}} \
+  --query "provisioningState" \
+  --output tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você sabe distinguir "regra salva" de "dataplane aplicou".</p>
+    </div>
+  </article>
+
+  <article class="step" id="conceitos-logs-workbook" data-nav="Logs × workbook">
+    <h3>Logs estruturados × workbook</h3>
+    <p class="what"><strong>O que:</strong> resource-specific logs alimentam tabelas AZFW*; workbook ajuda a enxergar padrões.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o workbook mostra <em>o quê</em> aconteceu. O KQL mostra <em>por quê</em>, com Policy, RuleCollectionGroup, RuleCollection e Rule.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Ferramenta</th><th>Use para</th><th>Limite</th></tr></thead>
+      <tbody>
+        <tr><td>Workbook do Azure Firewall</td><td>Visão rápida de tendências, ações e top destinos.</td><td>Não substitui a prova de qual regra decidiu.</td></tr>
+        <tr><td>KQL em AZFWNetworkRule</td><td>Fluxos L3/L4, ICMP, RDP e Deny/Allow de Network Rules.</td><td>Não mostra match de Application Rule.</td></tr>
+        <tr><td>KQL em AZFWApplicationRule</td><td>FQDN, URL e categorias no Ex6.</td><td>Depende de tráfego HTTP/HTTPS aplicável e ingestão.</td></tr>
+        <tr><td>KQL em AZFWNatRule</td><td>DNAT: origem, porta de destino, IP/porta traduzidos (demo do instrutor).</td><td>Fica vazia no lab, que não publica serviços.</td></tr>
+      </tbody>
+    </table>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="kql"><code>union withsource=Tabela AZFWNetworkRule, AZFWApplicationRule, AZFWNatRule
+| where TimeGenerated &gt; ago(30m)
+| summarize Eventos=count() by Tabela, _ResourceId
+| order by Tabela asc</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> quando o workbook parecer suficiente, abra a KQL correspondente para comprovar a regra.</p>
+    </div>
+  </article>
+
+  <div class="callout tip" id="conceitos-learn" data-nav="Links Microsoft Learn">
+    <p class="callout-title">Links validados no Microsoft Learn</p>
+    <ul>
+      <li><a href="{{c.docs.routingIntent}}" target="_blank" rel="noopener">Virtual WAN routing intent and policies</a></li>
+      <li><a href="https://learn.microsoft.com/azure/firewall/rule-processing" target="_blank" rel="noopener">Azure Firewall rule processing</a></li>
+      <li><a href="{{c.docs.policyOverview}}" target="_blank" rel="noopener">Azure Firewall Policy overview</a></li>
+      <li><a href="{{c.docs.policyHierarchy}}" target="_blank" rel="noopener">Rule hierarchy with Firewall Manager</a></li>
+      <li><a href="{{c.docs.ipGroups}}" target="_blank" rel="noopener">IP Groups in Azure Firewall</a></li>
+      <li><a href="{{c.docs.structuredLogs}}" target="_blank" rel="noopener">Monitor Azure Firewall logs</a></li>
+      <li><a href="{{c.docs.workbook}}" target="_blank" rel="noopener">Azure Firewall Workbook</a></li>
+    </ul>
+  </div>
+</section>

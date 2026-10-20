@@ -1,0 +1,11 @@
+// Ex2 — qual regra decidiu para cada VM e FQDN do experimento.
+// Tabela: AZFWApplicationRule.
+// Leia SourceIp + Fqdn e veja Policy/RCG/RC/Rule para comprovar a precedência.
+AZFWApplicationRule
+| where TimeGenerated > ago(4h)
+| where SourceIp in ("10.110.1.4", "10.120.1.4")
+| where Fqdn in~ ("learn.microsoft.com", "www.bing.com")
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| extend VM = case(SourceIp == "10.110.1.4", "vm-fwlab-a", SourceIp == "10.120.1.4", "vm-fwlab-b", "desconhecida")
+| project TimeGenerated, Firewall, VM, SourceIp, Fqdn, DestinationPort, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc

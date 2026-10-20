@@ -1,0 +1,17 @@
+// Ex1 — contagem Allow x Deny por firewall.
+// Tabelas: AZFWNetworkRule e AZFWApplicationRule.
+// Leia por Firewall, TipoLog e Action para confirmar a mudança antes/depois das regras.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(2h)
+    | extend TipoLog = "Network"
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(2h)
+    | extend TipoLog = "Application"
+)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| summarize Eventos = count() by Firewall, TipoLog, Action
+| order by Firewall asc, TipoLog asc, Action asc

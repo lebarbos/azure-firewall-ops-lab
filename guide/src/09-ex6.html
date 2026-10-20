@@ -1,0 +1,379 @@
+<section class="chapter" id="ex6" data-title="Ex6 · TLS, URL e IDPS (opcional)">
+  <h2>Ex6 · TLS, URL e IDPS (opcional)</h2>
+  <p class="meta">⏱ 30–45 min · Checkpoint C6</p>
+
+  <div class="callout warn">
+    <p class="callout-title">Exercício opcional</p>
+    <p>Este exercício adiciona complexidade operacional: certificado de CA, confiança nas VMs, TLS inspection por regra e IDPS em modo de bloqueio. Faça se houver tempo depois do C5 ou acompanhe como demonstração do instrutor.</p>
+  </div>
+
+  <p>O objetivo é ver por que TLS inspection existe no Azure Firewall Premium: sem descriptografar HTTPS, o firewall não enxerga o caminho completo da URL, nem consegue aplicar categorias e IDPS sobre o conteúdo criptografado. Com TLS inspection, o firewall encerra a sessão TLS do cliente, inspeciona o tráfego e abre outra sessão TLS com o destino. Para o cliente isso muda uma coisa essencial: ele precisa confiar na CA usada pelo firewall.</p>
+
+  <div class="callout note">
+    <p class="callout-title">Fonte validada</p>
+    <p>Os conceitos deste exercício foram validados na documentação oficial: <a href="https://learn.microsoft.com/azure/firewall/premium-features" target="_blank" rel="noopener">Azure Firewall Premium features</a>, <a href="https://learn.microsoft.com/azure/firewall/premium-certificates" target="_blank" rel="noopener">Azure Firewall Premium certificates</a> e <a href="https://learn.microsoft.com/azure/firewall/premium-deploy" target="_blank" rel="noopener">Deploy and configure Azure Firewall Premium</a>.</p>
+  </div>
+
+  <div class="callout danger">
+    <p class="callout-title">Não use esta CA em produção</p>
+    <p>O certificado auto-gerado pelo Portal é aceitável para este laboratório. Em produção, use uma PKI corporativa e publique a CA correta para os endpoints pelo processo de segurança da organização.</p>
+  </div>
+
+  <article class="step" id="ex6-1" data-nav="6.1 TLS inspection">
+    <h3>6.1 · Habilitar TLS inspection com certificado auto-gerado</h3>
+    <p class="what"><strong>O que:</strong> habilitar TLS inspection na policy pai <code>{{c.names.polParent}}</code>, aceitando os nomes que o Portal sugere.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o Azure Firewall precisa de uma CA para emitir certificados sob demanda para os sites acessados pelos clientes. No lab, o Portal cria automaticamente a identidade, o Key Vault e a CA de teste.</p>
+      <p>A CA fica no <strong>pai</strong> porque é configuração comum da organização: as filhas <code>{{c.names.polNs}}</code> e <code>{{c.names.polEw}}</code> herdam o certificado, e a tela de TLS inspection da filha passa a mostrar a opção <span class="ui">Override the parent policy's selected CA certificate</span>. As regras com TLS do passo 6.3 continuam na filha e usam essa CA herdada.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Abra o pai.</strong> Abra <span class="path">Firewall Manager › Azure Firewall Policies › {{c.names.polParent}} › Settings › TLS inspection</span> e selecione <span class="ui">Enabled</span>.</li>
+        <li><strong>Aceite os nomes sugeridos.</strong> O Portal preenche os três campos com itens novos e o mesmo sufixo aleatório. Não mude nada:
+          <ul>
+            <li><span class="ui">Managed identity</span>: <code>(New) {{c.names.miTlsPrefix}}&lt;sufixo&gt;</code></li>
+            <li><span class="ui">Key vault</span>: <code>(New) {{c.names.kvPrefix}}&lt;sufixo&gt;</code></li>
+            <li><span class="ui">Certificate</span>: <code>(New) {{c.names.tlsCertPrefix}}&lt;sufixo&gt;</code></li>
+          </ul>
+          Anote o sufixo: ele identifica o Key Vault e o certificado no passo 6.2.</li>
+        <li>Clique em <span class="ui">Save</span> e aguarde o provisioning da policy voltar para <span class="ui">Succeeded</span>.</li>
+        <li>Abra <span class="path">Azure Firewall Policies › {{c.names.polNs}} › Settings › TLS inspection</span>: a filha mostra <span class="ui">Parent policy</span> <code>{{c.names.polParent}}</code> e a caixa <span class="ui">Override the parent policy's selected CA certificate</span> desmarcada. Deixe assim.</li>
+      </ol>
+      <div class="callout tip">
+        <p class="callout-title">Se o seletor do Key Vault ficar em Loading</p>
+        <p>Marque <span class="ui">Disabled</span>, clique em <span class="ui">Save</span>, aguarde concluir, volte para <span class="ui">Enabled</span> e repita a seleção. Esse contorno força o Portal a persistir a criação automática antes de recarregar a lista.</p>
+      </div>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI para o fluxo de <em>auto-gerar</em> CA + Key Vault + Managed Identity a partir da tela de TLS inspection. O CLI consegue associar uma policy a uma identidade e a um segredo/certificado já existente, mas neste passo o Portal cria os três recursos do lab: a Managed Identity <code>{{c.names.miTlsPrefix}}&lt;sufixo&gt;</code>, o Key Vault <code>{{c.names.kvPrefix}}&lt;sufixo&gt;</code> e o certificado <code>{{c.names.tlsCertPrefix}}&lt;sufixo&gt;</code>.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> a página de TLS inspection de <code>{{c.names.polParent}}</code> mostra <span class="ui">Enabled</span>, a identidade <code>{{c.names.miTlsPrefix}}&lt;sufixo&gt;</code>, o Key Vault <code>{{c.names.kvPrefix}}&lt;sufixo&gt;</code> e o certificado <code>{{c.names.tlsCertPrefix}}&lt;sufixo&gt;</code>, criados em <code>{{c.names.rg}}</code>. Na filha, a CA aparece herdada do pai.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex6-2" data-nav="6.2 Confiar na CA">
+    <h3>6.2 · Baixar a CA e instalar nas VMs</h3>
+    <p class="what"><strong>O que:</strong> baixar o certificado público da CA do Key Vault e instalá-lo em <code>LocalMachine\Root</code> nas VMs <code>{{c.names.vmA}}</code> e <code>{{c.names.vmB}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> depois que o firewall intercepta HTTPS, o certificado apresentado ao cliente passa a ser emitido pela CA do firewall. Se a VM não confiar nessa CA, navegador, PowerShell e <code>curl.exe</code> verão erro de certificado.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Confira a CA.</strong> Abra <span class="path">Key vaults › {{c.names.kvPrefix}}&lt;sufixo&gt; › Objects › Certificates</span> e clique em <code>{{c.names.tlsCertPrefix}}&lt;sufixo&gt;</code>. Na versão atual, anote:
+          <ul>
+            <li><span class="ui">Subject</span> e <span class="ui">Issuer</span>: a CA autoassinada criada pelo Portal</li>
+            <li><span class="ui">X.509 SHA-1 Thumbprint</span>: o mesmo valor deve aparecer nas VMs no fim deste passo</li>
+          </ul>
+          Se a tela mostrar que você não tem permissão para listar certificados, siga para o próximo item: o bloco do Cloud Shell concede a permissão.</li>
+        <li><strong>Instale nas VMs.</strong> Abra o <span class="ui">Cloud Shell</span> (Bash) pela barra superior do Portal, abra o bloco <span class="ui">CLI</span> abaixo e cole o script inteiro. Ele baixa a CA e a importa em <code>Cert:\LocalMachine\Root</code> de <code>{{c.names.vmA}}</code> e <code>{{c.names.vmB}}</code> por Run Command.
+          <br>Não há caminho só pelo Portal: o Bastion Basic não transfere arquivos para a VM, e o Run Command do Portal não recebe arquivo.</li>
+        <li>Espere o script terminar: ele imprime <code>Instalando CA em …</code> e o certificado importado, uma vez por VM.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p>Este bloco é autocontido. Ele localiza o Key Vault pelo prefixo do lab e dá ao seu usuário permissão de leitura de certificados. Para isso, detecta o modelo de permissão do Key Vault criado pelo Portal: papel <code>Key Vault Certificate User</code> no modelo RBAC, ou Access Policy no modelo clássico. Em seguida, baixa a CA em DER, converte para base64 e injeta o conteúdo nas duas VMs por Run Command.</p>
+      <pre class="code" data-lang="bash"><code>RG='{{c.names.rg}}'
+KV_NAME=$(az keyvault list -g "$RG" --query "[?starts_with(name, '{{c.names.kvPrefix}}')].name | [0]" -o tsv)
+
+if [ -z "$KV_NAME" ]; then
+  echo "Key Vault com prefixo {{c.names.kvPrefix}} não encontrado. Conclua o passo 6.1 primeiro." &gt;&amp;2
+else
+  ME_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+  KV_ID=$(az keyvault show -n "$KV_NAME" --query id -o tsv)
+
+  if [ "$(az keyvault show -n "$KV_NAME" --query properties.enableRbacAuthorization -o tsv)" = "true" ]; then
+    echo "Key Vault em modo RBAC: atribuindo 'Key Vault Certificate User' ao seu usuário..."
+    az role assignment create \
+      --assignee-object-id "$ME_OBJECT_ID" \
+      --assignee-principal-type User \
+      --role "Key Vault Certificate User" \
+      --scope "$KV_ID" \
+      -o none
+    echo "Aguardando a propagação do RBAC (60 s)..."
+    sleep 60
+  else
+    echo "Key Vault em modo Access Policy: concedendo get/list de certificados..."
+    az keyvault set-policy -g "$RG" -n "$KV_NAME" \
+      --object-id "$ME_OBJECT_ID" \
+      --certificate-permissions get list \
+      -o none
+  fi
+
+  CERT_NAME=$(az keyvault certificate list --vault-name "$KV_NAME" \
+    --query "[?starts_with(name, '{{c.names.tlsCertPrefix}}')].name | [0]" -o tsv)
+  echo "Certificado: $CERT_NAME"
+
+  az keyvault certificate download \
+    --vault-name "$KV_NAME" \
+    --name "$CERT_NAME" \
+    --file /tmp/lab-tls-ca.cer \
+    --encoding DER \
+    -o none
+
+  CERT_B64=$(base64 -w 0 /tmp/lab-tls-ca.cer 2&gt;/dev/null || base64 /tmp/lab-tls-ca.cer | tr -d '\n')
+
+  for VM in '{{c.names.vmA}}' '{{c.names.vmB}}'; do
+    echo "Instalando CA em $VM..."
+    az vm run-command invoke -g "$RG" -n "$VM" \
+      --command-id RunPowerShellScript \
+      --scripts "\$bytes = [Convert]::FromBase64String('$CERT_B64'); \$path = 'C:\Windows\Temp\lab-tls-ca.cer'; [IO.File]::WriteAllBytes(\$path, \$bytes); Import-Certificate -FilePath \$path -CertStoreLocation 'Cert:\LocalMachine\Root' | Select-Object Subject, Issuer, Thumbprint" \
+      --query "value[0].message" -o tsv
+  done
+fi</code></pre>
+      <div class="callout warn">
+        <p class="callout-title">Contributor não basta no modo RBAC</p>
+        <p>Atribuir papel exige <code>Microsoft.Authorization/roleAssignments/write</code>, que o Owner tem e o Contributor não. Se o comando <code>az role assignment create</code> falhar com <code>AuthorizationFailed</code>, peça a quem é Owner da assinatura para atribuir o papel, ou baixe o certificado pelo Portal com uma conta que já tenha acesso.</p>
+      </div>
+      <div class="callout note">
+        <p class="callout-title">Por que este Run Command usa aspas duplas?</p>
+        <p>Na maior parte do guia, o PowerShell dentro de <code>--scripts</code> fica entre aspas simples para o Bash não expandir variáveis. Aqui a exceção é proposital: o Bash precisa interpolar <code>$CERT_B64</code>. Por isso, os <code>$</code> do PowerShell foram escapados como <code>\$</code>.</p>
+      </div>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o Run Command retorna o <code>Subject</code>, <code>Issuer</code> e <code>Thumbprint</code> do certificado importado nas duas VMs.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex6-3" data-nav="6.3 URL e categorias">
+    <h3>6.3 · Criar regras com TLS inspection, URL filtering e web category</h3>
+    <p class="what"><strong>O que:</strong> criar o RCG <code>{{c.rcg.tls.name}}</code> (prioridade <code>{{c.rcg.tls.priority}}</code>) com uma collection Allow por URL e uma collection Deny por categoria.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> filtrar por FQDN usa só o nome do host, como <code>en.wikipedia.org</code>. Filtrar por URL exige enxergar o caminho completo, como <code>/wiki/Firewall</code>; em HTTPS, esse caminho fica dentro do túnel TLS e só aparece para o firewall quando TLS inspection está habilitado na regra.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Crie o grupo.</strong> Abra <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span> e clique em <span class="ui">+ Add › Rule collection group</span>:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rcg.tls.name}}</code></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rcg.tls.priority}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li><strong>Crie a collection de Allow por URL.</strong> Clique em <span class="ui">Refresh</span>, depois em <span class="ui">+ Add › Rule collection</span>, e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.appTlsAllow.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.appTlsAllow.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">{{c.rc.appTlsAllow.action}}</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.tls.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.allowWikiFirewall}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgSpokes}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Https:443</code></li>
+            <li><span class="ui">TLS inspection</span>: marcado</li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">URL</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.tlsUrlAllowed}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li><strong>Crie a collection de Deny por categoria.</strong> Clique em <span class="ui">Refresh</span>, depois em <span class="ui">+ Add › Rule collection</span>, e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.appTlsDeny.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.appTlsDeny.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">{{c.rc.appTlsDeny.action}}</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.tls.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.denyGambling}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgSpokes}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Https:443</code></li>
+            <li><span class="ui">TLS inspection</span>: marcado</li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">Web categories</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.webCategory}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li>Clique em <span class="ui">Refresh</span> e confira as duas collections dentro de <code>{{c.rcg.tls.name}}</code> ({{c.rcg.tls.priority}}). Aguarde mais 1–2 minutos antes dos testes.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>RG='{{c.names.rg}}'
+IPG_SPOKES_ID=$(az network ip-group show -g "$RG" -n '{{c.names.ipgSpokes}}' --query id -o tsv)
+
+az network firewall policy rule-collection-group create \
+  -g "$RG" \
+  --policy-name '{{c.names.polNs}}' \
+  --name '{{c.rcg.tls.name}}' \
+  --priority '{{c.rcg.tls.priority}}' \
+  -o none
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g "$RG" \
+  --policy-name '{{c.names.polNs}}' \
+  --rule-collection-group-name '{{c.rcg.tls.name}}' \
+  --name '{{c.rc.appTlsAllow.name}}' \
+  --collection-priority '{{c.rc.appTlsAllow.priority}}' \
+  --action '{{c.rc.appTlsAllow.action}}' \
+  --rule-name '{{c.rules.allowWikiFirewall}}' \
+  --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --protocols Https=443 \
+  --target-urls '{{c.targets.tlsUrlAllowed}}' \
+  --enable-tls-inspection true \
+  -o none
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g "$RG" \
+  --policy-name '{{c.names.polNs}}' \
+  --rule-collection-group-name '{{c.rcg.tls.name}}' \
+  --name '{{c.rc.appTlsDeny.name}}' \
+  --collection-priority '{{c.rc.appTlsDeny.priority}}' \
+  --action '{{c.rc.appTlsDeny.action}}' \
+  --rule-name '{{c.rules.denyGambling}}' \
+  --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --protocols Https=443 \
+  --web-categories '{{c.targets.webCategory}}' \
+  --enable-tls-inspection true \
+  -o none
+
+az network firewall policy rule-collection-group wait \
+  -g "$RG" \
+  --policy-name '{{c.names.polNs}}' \
+  --name '{{c.rcg.tls.name}}' \
+  --updated</code></pre>
+    </details>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>A partir da VM-A, o que deve acontecer com <code>https://{{c.targets.tlsUrlAllowed}}</code>, <code>https://{{c.targets.tlsUrlDenied}}</code> e um site da categoria <code>{{c.targets.webCategory}}</code>?</p>
+    </div>
+    <div class="portal">
+      <h4>Teste na VM-A</h4>
+      <ol>
+        <li>Entre na VM-A pelo Bastion.</li>
+        <li>Abra o PowerShell e rode os testes:</li>
+      </ol>
+      <pre class="code" data-lang="powershell"><code>Invoke-WebRequest https://{{c.targets.tlsUrlAllowed}} -UseBasicParsing
+Invoke-WebRequest https://{{c.targets.tlsUrlDenied}} -UseBasicParsing
+Invoke-WebRequest https://{{c.targets.webCategorySample}} -UseBasicParsing</code></pre>
+      <p>O exemplo <code>{{c.targets.webCategorySample}}</code> vem da base didática MIT usada como referência e deve ser tratado como alvo de teste, não como recomendação de navegação. A categoria de um site pode mudar: se o teste não for negado, confira a coluna <code>WebCategory</code> no log e repita com outro site da categoria <code>{{c.targets.webCategory}}</code>.</p>
+    </div>
+    <details class="cli">
+      <summary>Teste via Run Command</summary>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke -g '{{c.names.rg}}' -n '{{c.names.vmA}}' \
+  --command-id RunPowerShellScript \
+  --scripts 'Invoke-WebRequest https://{{c.targets.tlsUrlAllowed}} -UseBasicParsing; Invoke-WebRequest https://{{c.targets.tlsUrlDenied}} -UseBasicParsing; Invoke-WebRequest https://{{c.targets.webCategorySample}} -UseBasicParsing' \
+  --query "value[0].message" -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> o resultado dos três testes. Só então abra a resposta, que também mostra como conferir o emissor do certificado visto pela VM-A.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p><code>https://{{c.targets.tlsUrlAllowed}}</code> deve ser permitido. <code>https://{{c.targets.tlsUrlDenied}}</code> deve ser negado porque só o caminho <code>/wiki/Firewall</code> foi permitido; o host é o mesmo, mas a URL não casa com nenhuma regra e cai no deny padrão. Um site da categoria <code>{{c.targets.webCategory}}</code> deve ser negado pela regra <code>{{c.rules.denyGambling}}</code>.</p>
+      <p>Para provar que houve interceptação TLS, verifique o emissor do certificado dentro da VM-A:</p>
+      <pre class="code" data-lang="powershell"><code>$uri = [Uri]'https://{{c.targets.tlsUrlAllowed}}'
+$tcp = [Net.Sockets.TcpClient]::new($uri.Host, 443)
+$ssl = [Net.Security.SslStream]::new($tcp.GetStream(), $false, ({ $true }))
+$ssl.AuthenticateAsClient($uri.Host)
+$cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
+$cert | Format-List Subject, Issuer, Thumbprint
+$ssl.Dispose()
+$tcp.Dispose()</code></pre>
+      <p>No navegador, a mesma prova aparece no cadeado da barra de endereço: abra os detalhes do certificado e confira o emissor. Ele deve apontar para a CA do lab, não diretamente para a CA pública original do site.</p>
+      <p><strong>Verifique:</strong> o emissor do certificado observado pela VM-A é a CA instalada no passo 6.2.</p>
+    </details>
+  </article>
+
+  <article class="step" id="ex6-4" data-nav="6.4 IDPS Alert and Deny">
+    <h3>6.4 · Habilitar IDPS em Alert and Deny</h3>
+    <p class="what"><strong>O que:</strong> mudar o IDPS da policy <code>{{c.names.polNs}}</code> para <span class="ui">Alert and Deny</span> e testar a assinatura <code>{{c.targets.idpsSignatureId}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> IDPS bloqueia padrões de ataque conhecidos. Em HTTP puro, o payload está visível e o bloqueio não depende de TLS inspection. Em HTTPS, o IDPS só consegue inspecionar o conteúdo quando a regra de aplicação também termina TLS.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Mude o modo.</strong> Abra <span class="path">Firewall Manager › Azure Firewall Policies › {{c.names.polNs}} › Settings › IDPS</span> e, na aba <span class="ui">Mode</span>, selecione <span class="ui">Alert and Deny</span>.</li>
+        <li>Clique em <span class="ui">Save</span> e espere o provisioning da policy voltar para <span class="ui">Succeeded</span>. Aguarde mais 1–2 minutos.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p>No CLI, o valor <code>Deny</code> corresponde ao modo de Portal <span class="ui">Alert and Deny</span>.</p>
+      <pre class="code" data-lang="bash"><code>az network firewall policy update \
+  -g '{{c.names.rg}}' \
+  -n '{{c.names.polNs}}' \
+  --idps-mode Deny \
+  -o none</code></pre>
+    </details>
+    <div class="portal">
+      <h4>Teste na VM-A</h4>
+      <ol>
+        <li>Abra <span class="path">Virtual machines › {{c.names.vmA}} › Connect › Bastion</span> e entre com <code>{{c.vm.adminUsername}}</code> e a senha do Ex0.</li>
+        <li>Abra <span class="path">Start › Windows PowerShell</span> e execute o comando abaixo. Ele faz uma requisição HTTP com o User-Agent que a assinatura <code>{{c.targets.idpsSignatureId}}</code> reconhece.</li>
+      </ol>
+      <pre class="code" data-lang="powershell"><code>curl.exe -A "{{c.targets.idpsUserAgent}}" {{c.targets.idpsProbeUrl}}</code></pre>
+    </div>
+    <details class="cli">
+      <summary>Teste via Run Command</summary>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke -g '{{c.names.rg}}' -n '{{c.names.vmA}}' \
+  --command-id RunPowerShellScript \
+  --scripts 'curl.exe -A "{{c.targets.idpsUserAgent}}" {{c.targets.idpsProbeUrl}}' \
+  --query "value[0].message" -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> a conexão é bloqueada ou reiniciada, e os logs de IDPS mostram a assinatura <code>{{c.targets.idpsSignatureId}}</code>.</p>
+      <p>A CA do TLS está no pai e o IDPS está na filha <code>{{c.names.polNs}}</code>: o modo <span class="ui">Alert and Deny</span> da filha bloqueia mesmo com o pai sem IDPS, e a inspeção usa a CA herdada do pai.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex6-5" data-nav="6.5 KQL">
+    <h3>6.5 · Provar TLS, URL, categoria e IDPS nos logs</h3>
+    <p class="what"><strong>O que:</strong> usar as consultas KQL do lab para confirmar o que foi inspecionado e o que foi bloqueado.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o teste no navegador ou no PowerShell mostra o sintoma. O KQL mostra a decisão do firewall: regra, URL, categoria, TLS inspection e assinatura IDPS.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Log Analytics workspaces › {{c.names.law}} › Logs</span> e ajuste o <span class="ui">Time range</span> para <span class="ui">Last 4 hours</span>.</li>
+        <li><strong>URL, categoria e TLS.</strong> Cole a primeira consulta e clique em <span class="ui">Run</span>.</li>
+      </ol>
+      {{kql:ex6-tls-url-categoria}}
+      <ol start="3">
+        <li><strong>IDPS.</strong> Cole a segunda consulta e clique em <span class="ui">Run</span>.</li>
+      </ol>
+      {{kql:ex6-idps}}
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Use o Portal neste passo. As consultas KQL são embutidas no guia para cópia direta; o checkpoint C6 automatiza a checagem mínima.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Como ler:</strong> em <code>ex6-tls-url-categoria</code>, procure <code>IsTlsInspected == true</code>, <code>TargetUrl</code> preenchido para <code>{{c.targets.tlsUrlAllowed}}</code> ou <code>{{c.targets.tlsUrlDenied}}</code>, e <code>WebCategory</code> preenchida para a regra <code>{{c.rules.denyGambling}}</code>. Em <code>ex6-idps</code>, procure <code>SignatureId == {{c.targets.idpsSignatureId}}</code>, ação de bloqueio e a origem <code>{{c.network.vmAIp}}</code>.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex6-c6" data-nav="Checkpoint C6">
+    <h3>Checkpoint C6</h3>
+    <p>Rode o checkpoint para confirmar que o exercício opcional ficou no estado esperado.</p>
+    <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C6</code></pre>
+    <p>O C6 verifica TLS habilitado, IDPS em Alert and Deny, existência do RCG <code>{{c.rcg.tls.name}}</code>, hit com <code>IsTlsInspected == true</code> e hit da assinatura <code>{{c.targets.idpsSignatureId}}</code>.</p>
+  </div>
+
+  <div class="callout tip">
+    <p class="callout-title">O que você aprendeu</p>
+    <ul>
+      <li>TLS inspection permite URL filtering, categorias mais granulares e IDPS sobre HTTPS.</li>
+      <li>O cliente precisa confiar na CA usada pelo firewall; caso contrário, o erro é de certificado, não de regra.</li>
+      <li>FQDN filtering não precisa ver o caminho da URL; URL filtering precisa.</li>
+      <li>IDPS em HTTP puro não depende de TLS inspection, mas em HTTPS depende da descriptografia.</li>
+    </ul>
+  </div>
+
+  <div class="callout warn">
+    <p class="callout-title">Cleanup</p>
+    <p>O cleanup também remove e faz purge do Key Vault criado neste exercício (<code>{{c.names.kvPrefix}}&lt;sufixo único&gt;</code>). Sem purge, o nome global do Key Vault pode continuar reservado por soft-delete.</p>
+  </div>
+</section>

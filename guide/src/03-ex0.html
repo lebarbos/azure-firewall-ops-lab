@@ -1,0 +1,199 @@
+<section class="chapter" id="ex0" data-title="Ex0 · Preparação e deploy">
+  <h2>Ex0 · Preparação e deploy</h2>
+  <p class="meta">20 min · Checkpoint C0 · a teoria acontece enquanto o deploy roda</p>
+  <p>Objetivo: preparar o Cloud Shell, validar região/SKU, disparar o deployment da base e acompanhar a criação sem deixar segredo em arquivo, argumento ou histórico.</p>
+  <div class="callout warn">
+    <p class="callout-title">Atenção ao Cloud Shell</p>
+    <p>Use <strong>Bash</strong>. Uma sessão efêmera serve para este lab, mas o Cloud Shell encerra após 20 minutos sem atividade interativa e o diretório <code>$HOME</code> pode ser perdido quando a sessão termina. Se cair, reabra o Cloud Shell, clone o repositório de novo e rode os scripts novamente: eles leem o estado do Azure quando o Resource Group já existe.</p>
+    <p>Referência: <a href="https://learn.microsoft.com/en-us/azure/cloud-shell/faq-troubleshooting" target="_blank" rel="noopener">Azure Cloud Shell FAQ</a>.</p>
+  </div>
+
+  <article class="step" id="ex0-1" data-nav="0.1 Abrir Cloud Shell">
+    <h3>0.1 · Abrir o Cloud Shell em Bash</h3>
+    <p class="what"><strong>O que:</strong> abra uma sessão do Azure Cloud Shell usando Bash.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> todos os scripts foram escritos para Bash no Cloud Shell. Eles não dependem de estado permanente local e podem ser reexecutados se a sessão expirar.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra o <span class="path">Azure portal › Cloud Shell</span>.</li>
+        <li>Escolha <span class="ui">Bash</span>. Se aparecer a escolha de storage, a opção efêmera é suficiente para o lab; o importante é saber que o clone pode sumir ao encerrar a sessão.</li>
+        <li>Confirme visualmente a assinatura ativa antes de executar qualquer script.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI: este passo abre a interface interativa do Cloud Shell no Portal.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o prompt mostra uma sessão Bash pronta para comandos. Se você fechar ou ficar ocioso por muito tempo, reabra, clone novamente e continue pelo script adequado.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex0-2" data-nav="0.2 Instalar Bicep e extensões">
+    <h3>0.2 · Instalar o Bicep e as extensões do Azure CLI</h3>
+    <p class="what"><strong>O que:</strong> instale o Bicep CLI e as extensões usadas pelo lab, um comando por vez.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o guia evita instalação automática escondida. Se o preflight encontrar uma extensão ausente, você sabe exatamente qual comando repetir. A base do lab é um arquivo Bicep: sem o Bicep CLI, o preflight para com <code>Bicep CLI not found</code>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>No Cloud Shell em Bash, cole um bloco por vez.</li>
+        <li>Se o comando avisar que a extensão já existe, o parâmetro <code>--upgrade</code> mantém a versão atualizada.</li>
+        <li>Se o Cloud Shell for recriado (sessão efêmera ou timeout), repita este passo antes do preflight.</li>
+      </ol>
+    </div>
+    <details class="cli" open>
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az bicep install
+az bicep version</code></pre>
+      <pre class="code" data-lang="bash"><code>az extension add --name azure-firewall --upgrade</code></pre>
+      <pre class="code" data-lang="bash"><code>az extension add --name virtual-wan --upgrade</code></pre>
+      <pre class="code" data-lang="bash"><code>az extension add --name bastion --upgrade</code></pre>
+      <pre class="code" data-lang="bash"><code>az extension add --name log-analytics --upgrade</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> <code>az bicep version</code> mostra a versão instalada e nenhum comando termina com erro. A lista de extensões vem de <code>{{c.cliExtensions}}</code>.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex0-3" data-nav="0.3 Clonar o repositório">
+    <h3>0.3 · Clonar o repositório do lab</h3>
+    <p class="what"><strong>O que:</strong> baixe o pacote do lab no diretório padrão do Cloud Shell.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> os scripts assumem que você executa os comandos a partir da raiz do repositório, onde ficam <code>lab.contract.json</code>, <code>infra/</code> e <code>scripts/</code>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>No Cloud Shell, use <span class="path">Manage files › Upload</span> apenas se o GitHub estiver indisponível para você.</li>
+        <li>Se usar ZIP, envie o arquivo, extraia-o e entre na pasta extraída antes de continuar.</li>
+      </ol>
+    </div>
+    <details class="cli" open>
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>cd ~
+rm -rf {{c.repo.cloneDir}}
+git clone {{c.repo.url}} {{c.repo.cloneDir}}
+cd {{c.repo.cloneDir}}</code></pre>
+      <pre class="code" data-lang="bash"><code># Alternativa se você subiu o ZIP pelo botão de upload do Cloud Shell:
+cd ~
+ZIP="$(ls -t ~/{{c.repo.cloneDir}}*.zip | head -n 1)"
+echo "Usando $ZIP"
+rm -rf {{c.repo.cloneDir}}
+unzip -q -o "$ZIP" -d {{c.repo.cloneDir}}
+cd {{c.repo.cloneDir}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> <code>pwd</code> termina em <code>{{c.repo.cloneDir}}</code> e <code>ls scripts infra lab.contract.json</code> lista os arquivos esperados.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex0-4" data-nav="0.4 Rodar preflight">
+    <h3>0.4 · Rodar o preflight</h3>
+    <p class="what"><strong>O que:</strong> valide região, SKU, providers e permissões antes de criar recursos.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o deploy usa dois Azure Firewalls Premium, vWAN, Bastion e duas VMs. O preflight tenta escolher a primeira combinação viável de região e SKU, grava <code>.lab/env</code> sem segredo e mostra uma tabela de decisão.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Use o Portal apenas para conferir a assinatura: <span class="path">Subscriptions › Overview</span>.</li>
+        <li>Se nenhuma região passar, confira quota em <span class="path">Subscriptions › Usage + quotas</span> e chame o instrutor antes de mudar a arquitetura.</li>
+      </ol>
+    </div>
+    <details class="cli" open>
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>cd ~/{{c.repo.cloneDir}}
+./scripts/preflight.sh</code></pre>
+      <pre class="code" data-lang="bash"><code># Se o instrutor orientar uma região específica, force a validação assim:
+cd ~/{{c.repo.cloneDir}}
+LAB_REGION={{c.regions.0}} ./scripts/preflight.sh</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> leia a tabela linha a linha. <strong>✅</strong> significa que aquela combinação passou nas checagens do script; <strong>❌</strong> vem com o motivo a corrigir ou escalar. Se nenhuma região servir, não aumente a VM nem troque endereçamento por conta própria: peça ao instrutor uma assinatura/região alternativa ou ajuste autorizado em <code>lab.contract.json</code>.</p>
+      <p>Ao final, o arquivo <code>.lab/env</code> deve conter <code>LAB_REGION</code>, <code>LAB_VM_SIZE</code> e <code>LAB_TRUSTED_LAUNCH</code>, sem senha.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex0-5" data-nav="0.5 Disparar deploy">
+    <h3>0.5 · Disparar o deploy da base</h3>
+    <p class="what"><strong>O que:</strong> execute o script que pede a senha e envia o deployment de assinatura.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> a senha do usuário <code>{{c.vm.adminUsername}}</code> é lida duas vezes sem eco, validada localmente e exportada apenas para o processo do <code>az</code>. O template lê a senha por variável de ambiente; ela não aparece na linha de comando, em arquivo de parâmetro ou em output. O <code>--no-wait</code> libera o Cloud Shell enquanto o Azure continua criando os recursos.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Antes de executar, deixe aberto <span class="path">Subscriptions › Deployments</span>.</li>
+        <li>Depois do comando, acompanhe também <span class="path">Resource groups › {{c.names.rg}} › Deployments</span> e <span class="path">Resource groups › {{c.names.rg}} › Resources</span>.</li>
+      </ol>
+    </div>
+    <details class="cli" open>
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>cd ~/{{c.repo.cloneDir}}
+./scripts/deploy.sh</code></pre>
+      <p>Regras da senha: 12 a 123 caracteres, pelo menos 3 de 4 classes de caracteres, sem o nome do usuário <code>{{c.vm.adminUsername}}</code> e sem começar com <code>@</code>.</p>
+    </details>
+    <details class="cli">
+      <summary>CLI equivalente ao trecho crítico do deploy.sh</summary>
+      <pre class="code" data-lang="bash"><code>cd ~/{{c.repo.cloneDir}}
+source .lab/env
+read -rsp "Senha de {{c.vm.adminUsername}}: " LAB_ADMIN_PASSWORD; echo
+export LAB_REGION LAB_VM_SIZE LAB_TRUSTED_LAUNCH LAB_ADMIN_PASSWORD
+export LAB_EXPIRES_ON="$(date -u -d '+1 day' +%F)"
+az deployment sub create \
+  --location "$LAB_REGION" \
+  --name "{{c.names.deploymentPrefix}}-$(date -u +%Y%m%d%H%M%S)" \
+  --parameters infra/main.bicepparam \
+  --no-wait
+unset LAB_ADMIN_PASSWORD</code></pre>
+      <p>O script real também pede confirmação da senha, aplica a validação local e recusa sobrescrever um <code>{{c.names.rg}}</code> existente sem <code>--force</code>.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o comando retorna sem expor a senha e informa o nome do deployment. O tempo estimado da base é 45 a 75 minutos.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex0-6" data-nav="0.6 Acompanhar deploy">
+    <h3>0.6 · Acompanhar o deploy sem reiniciar a base</h3>
+    <p class="what"><strong>O que:</strong> acompanhe o deployment pelo Portal ou por consultas somente leitura.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o Cloud Shell pode cair, mas o deployment continua no Azure. A retomada correta é consultar o estado ou reabrir a pasta e rodar os scripts reexecutáveis, não apagar o ambiente nem disparar outro lab paralelo.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Subscriptions › Deployments</span> e filtre por <code>{{c.names.deploymentPrefix}}</code>.</li>
+        <li>Abra o deployment mais recente e acompanhe <span class="path">Deployment details</span>.</li>
+        <li>Abra <span class="path">Resource groups › {{c.names.rg}} › Resources</span> para ver os recursos surgirem.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az deployment sub list \
+  --query "[?starts_with(name, '{{c.names.deploymentPrefix}}-')].[name,properties.provisioningState,properties.timestamp]" \
+  -o table</code></pre>
+      <pre class="code" data-lang="bash"><code>DEPLOYMENT_NAME=$(az deployment sub list \
+  --query "reverse(sort_by([?starts_with(name, '{{c.names.deploymentPrefix}}-')], &amp;properties.timestamp))[0].name" \
+  -o tsv)
+az deployment sub show \
+  --name "$DEPLOYMENT_NAME" \
+  --query "{name:name,state:properties.provisioningState,outputs:properties.outputs}" \
+  -o jsonc</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> o deployment chega a <code>Succeeded</code>. Se aparecer <code>Failed</code>, abra a operação com erro e preserve a mensagem completa para o instrutor.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex0-c0" data-nav="Checkpoint C0">
+    <h3>Checkpoint C0 · Base pronta</h3>
+    <pre class="code" data-lang="bash"><code>cd ~/{{c.repo.cloneDir}}
+./scripts/checkpoint.sh C0</code></pre>
+    <p>O C0 verifica: deployment <code>Succeeded</code>, os dois firewalls em <code>Succeeded</code>, routing intent <code>{{c.names.routingIntent}}</code> apontando PrivateTraffic para o firewall E-W, conexões do hub, rotas efetivas da NIC A, extensão <code>{{c.names.cse}}</code> com marcador <code>{{c.vm.bootstrapMarker}}</code> e IIS respondendo em <code>localhost</code> via Run Command.</p>
+    <p>Só avance para o Ex1 quando o checkpoint estiver verde ou quando o instrutor declarar a contingência.</p>
+  </div>
+</section>

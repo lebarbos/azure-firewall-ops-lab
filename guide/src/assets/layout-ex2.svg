@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lay-title lay-desc" viewBox="0 0 1000 470">
+  <title id="lay-title">O que você vai montar no Ex2 em {{c.names.polNs}}</title>
+  <desc id="lay-desc">A policy {{c.names.polNs}} tem quatro RCGs, da esquerda para a direita por prioridade. {{c.rcg.infrastructure.name}} já existe desde o deploy e {{c.rcg.baselineNs.name}} vem do Ex1. No passo 2.1 você cria {{c.rcg.wlA.name}} com os bloqueios em {{c.rc.appWlA.name}}. No início do E2 você cria {{c.rcg.wlB.name}}; os experimentos E2, E3 e E4 colocam nele {{c.rc.appWlBAllow.name}}, {{c.rc.netWlBTemp.name}} e {{c.rc.appWlBDeny.name}}.</desc>
+  <defs>
+    <style>
+      .lay-pol{fill:#1f3864}
+      .lay-head{fill:#4472c4}
+      .lay-col{fill:#f3f6fb;stroke:#4472c4;stroke-width:1.5}
+      .lay-old{fill:#f3f2f1;stroke:#a19f9d;stroke-width:1.5}
+      .lay-oldhead{fill:#8a8886}
+      .lay-net{fill:#fff;stroke:#2e7d32;stroke-width:2}
+      .lay-app{fill:#fff;stroke:#6a3fa0;stroke-width:2}
+      .lay-tmp{stroke-dasharray:6 4}
+      .lay-snet{fill:#2e7d32}
+      .lay-sapp{fill:#6a3fa0}
+      .lay-pt{font:700 15px "Segoe UI",Arial,sans-serif;fill:#fff}
+      .lay-h{font:700 14px "Segoe UI",Arial,sans-serif;fill:#fff}
+      .lay-hs{font:12px "Segoe UI",Arial,sans-serif;fill:#fff}
+      .lay-c{font:700 12.5px "Segoe UI",Arial,sans-serif;fill:#1b1a19}
+      .lay-r{font:600 11.5px Consolas,"Courier New",monospace;fill:#1b1a19}
+      .lay-d{font:11.5px "Segoe UI",Arial,sans-serif;fill:#323130}
+      .lay-note{font:12px "Segoe UI",Arial,sans-serif;fill:#323130}
+    </style>
+  </defs>
+
+  <rect x="10" y="8" width="980" height="34" rx="6" class="lay-pol"/>
+  <text x="24" y="31" class="lay-pt">{{c.names.polNs}} · Firewall Policy do {{c.names.fwNs}} · RCGs da esquerda para a direita por prioridade</text>
+
+  <rect x="10" y="54" width="150" height="320" rx="8" class="lay-old"/>
+  <rect x="10" y="54" width="150" height="48" rx="8" class="lay-oldhead"/>
+  <text x="20" y="74" class="lay-h">{{c.rcg.infrastructure.name}}</text>
+  <text x="20" y="93" class="lay-hs">{{c.rcg.infrastructure.priority}} · já existe (deploy)</text>
+  <rect x="16" y="112" width="138" height="62" rx="6" class="lay-app"/>
+  <rect x="16" y="112" width="6" height="62" class="lay-sapp"/>
+  <text x="27" y="130" class="lay-c">{{c.rc.infra.name}}</text>
+  <text x="27" y="146" class="lay-d">App · {{c.rc.infra.priority}} · Allow</text>
+  <text x="27" y="164" class="lay-r">{{c.rules.infraBlob}}</text>
+
+  <rect x="170" y="54" width="300" height="320" rx="8" class="lay-col"/>
+  <rect x="170" y="54" width="300" height="48" rx="8" class="lay-head"/>
+  <text x="182" y="74" class="lay-h">{{c.rcg.wlA.name}}</text>
+  <text x="182" y="93" class="lay-hs">Priority {{c.rcg.wlA.priority}} · passo 2.1 · os bloqueios</text>
+
+  <rect x="180" y="112" width="280" height="100" rx="6" class="lay-app"/>
+  <rect x="180" y="112" width="6" height="100" class="lay-sapp"/>
+  <text x="194" y="130" class="lay-c">{{c.rc.appWlA.name}} · Application · {{c.rc.appWlA.priority}} · Deny</text>
+  <text x="194" y="149" class="lay-r">{{c.rules.denyLearn}}</text>
+  <text x="194" y="165" class="lay-d">{{c.names.ipgWlA}} → {{c.targets.learn}}</text>
+  <text x="194" y="185" class="lay-r">{{c.rules.denyBing}}</text>
+  <text x="194" y="201" class="lay-d">{{c.names.ipgSpokes}} (A e B) → {{c.targets.bing}}</text>
+
+  <rect x="480" y="54" width="340" height="320" rx="8" class="lay-col"/>
+  <rect x="480" y="54" width="340" height="48" rx="8" class="lay-head"/>
+  <text x="492" y="74" class="lay-h">{{c.rcg.wlB.name}}</text>
+  <text x="492" y="93" class="lay-hs">Priority {{c.rcg.wlB.priority}} · criado no E2 · as liberações</text>
+
+  <text x="492" y="124" class="lay-d">Criado no início do E2. Os experimentos colocam:</text>
+
+  <rect x="490" y="134" width="320" height="66" rx="6" class="lay-net lay-tmp"/>
+  <rect x="490" y="134" width="6" height="66" class="lay-snet"/>
+  <text x="504" y="152" class="lay-c">{{c.rc.netWlBTemp.name}} · Network · {{c.rc.netWlBTemp.priority}} · Allow · E3</text>
+  <text x="504" y="171" class="lay-r">{{c.rules.allowHttpsAny}}</text>
+  <text x="504" y="188" class="lay-d">{{c.names.ipgWlB}} → * TCP 443 (removida no E3)</text>
+
+  <rect x="490" y="210" width="320" height="66" rx="6" class="lay-app lay-tmp"/>
+  <rect x="490" y="210" width="6" height="66" class="lay-sapp"/>
+  <text x="504" y="228" class="lay-c">{{c.rc.appWlBAllow.name}} · Application · {{c.rc.appWlBAllow.priority}} · Allow · E2</text>
+  <text x="504" y="247" class="lay-r">{{c.rules.allowLearn}}</text>
+  <text x="504" y="264" class="lay-d">{{c.names.ipgSpokes}} → {{c.targets.learn}} (fica)</text>
+
+  <rect x="490" y="286" width="320" height="66" rx="6" class="lay-app lay-tmp"/>
+  <rect x="490" y="286" width="6" height="66" class="lay-sapp"/>
+  <text x="504" y="304" class="lay-c">{{c.rc.appWlBDeny.name}} · Application · {{c.rc.appWlBDeny.priority}} · Deny · E4</text>
+  <text x="504" y="323" class="lay-r">{{c.rules.denyLearnB}}</text>
+  <text x="504" y="340" class="lay-d">{{c.names.ipgWlB}} → {{c.targets.learn}} (removida no E4)</text>
+
+  <rect x="830" y="54" width="160" height="320" rx="8" class="lay-old"/>
+  <rect x="830" y="54" width="160" height="48" rx="8" class="lay-oldhead"/>
+  <text x="840" y="74" class="lay-h">{{c.rcg.baselineNs.name}}</text>
+  <text x="840" y="93" class="lay-hs">{{c.rcg.baselineNs.priority}} · já existe (Ex1)</text>
+  <rect x="836" y="112" width="148" height="80" rx="6" class="lay-app"/>
+  <rect x="836" y="112" width="6" height="80" class="lay-sapp"/>
+  <text x="847" y="130" class="lay-c">{{c.rc.appBaseline.name}}</text>
+  <text x="847" y="146" class="lay-d">App · {{c.rc.appBaseline.priority}} · Allow</text>
+  <text x="847" y="164" class="lay-r">{{c.rules.allowMicrosoft}}</text>
+  <text x="847" y="181" class="lay-d">spokes → {{c.targets.baselineFqdn}}</text>
+
+  <rect x="12" y="392" width="14" height="14" class="lay-snet"/>
+  <text x="32" y="404" class="lay-note">Network</text>
+  <rect x="100" y="392" width="14" height="14" class="lay-sapp"/>
+  <text x="120" y="404" class="lay-note">Application</text>
+  <rect x="280" y="391" width="34" height="16" rx="3" class="lay-net lay-tmp"/>
+  <text x="322" y="404" class="lay-note">tracejado = existe só durante o experimento</text>
+  <rect x="600" y="391" width="34" height="16" rx="3" class="lay-old"/>
+  <text x="642" y="404" class="lay-note">cinza = já existe antes do Ex2</text>
+  <text x="12" y="434" class="lay-note">Dentro de cada RCG, as collections Network têm número menor que as Application: é o que o Portal exige ao salvar.</text>
+  <text x="12" y="454" class="lay-note">Repare: os bloqueios estão no RCG de número melhor ({{c.rcg.wlA.priority}}); as liberações, no de número pior ({{c.rcg.wlB.priority}}).</text>
+</svg>

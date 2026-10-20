@@ -1,0 +1,18 @@
+// Ex1 — linha do tempo dos eventos recentes de rede e aplicação.
+// Tabelas: AZFWNetworkRule e AZFWApplicationRule.
+// Leia da ocorrência mais recente para a mais antiga e compare Policy/RCG/RC/Rule.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(2h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn = "", TargetUrl = "", Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(2h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", SourceIp, SourcePort, DestinationIp = "", DestinationPort, Fqdn, TargetUrl, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, TipoLog, SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn, TargetUrl, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc
+| take 200

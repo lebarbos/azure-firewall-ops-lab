@@ -1,0 +1,7 @@
+// Referência — quais tabelas AZFW* estão recebendo dados.
+// Tabelas: categorias resource-specific principais do Azure Firewall.
+// Leia Eventos e UltimoEvento para diagnosticar atraso ou categoria não habilitada.
+union isfuzzy=true withsource=Tabela AZFWNetworkRule, AZFWApplicationRule, AZFWNatRule, AZFWThreatIntel, AZFWIdpsSignature
+| where TimeGenerated > ago(24h)
+| summarize Eventos = count(), PrimeiroEvento = min(TimeGenerated), UltimoEvento = max(TimeGenerated) by Tabela
+| order by Tabela asc

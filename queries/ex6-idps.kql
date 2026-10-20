@@ -1,0 +1,9 @@
+// Ex6 — assinatura IDPS esperada no teste HaxerMen.
+// Tabela: AZFWIdpsSignature.
+// Leia SignatureId 2032081, Action e Severity para confirmar o bloqueio.
+AZFWIdpsSignature
+| where TimeGenerated > ago(2h)
+| where SignatureId == "2032081"
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, SourceIp, SourcePort, DestinationIp, DestinationPort, Protocol, Action, SignatureId, Description, Category, Severity
+| order by TimeGenerated desc

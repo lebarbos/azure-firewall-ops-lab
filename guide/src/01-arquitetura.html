@@ -1,0 +1,144 @@
+<section class="chapter" id="arquitetura" data-title="Arquitetura" data-progress="off">
+  <h2>Arquitetura</h2>
+  <p class="meta">⏱ 25 min · base conceitual para C0, C1 e Ex2</p>
+
+  <figure class="diagram">
+    {{svg:arquitetura}}
+    <figcaption>Topologia cliente-neutra do lab. Cores e padrões de traço indicam fluxos, não largura de banda ou SLA.</figcaption>
+  </figure>
+
+  <article class="step" id="arquitetura-componentes" data-nav="Componentes">
+    <h3>Componentes principais</h3>
+    <p class="what"><strong>O que:</strong> a base cria dois planos de inspeção: E-W no secured vWAN e N-S em uma VNet separada.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> separar os planos deixa visível qual firewall tomou a decisão e evita que um único caminho esconda problemas de roteamento.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Componente</th><th>Endereço</th><th>Função</th></tr></thead>
+      <tbody>
+        <tr><td>{{c.names.vwan}} / {{c.names.vhub}}</td><td>{{c.network.vhub}}</td><td>Backbone gerenciado do lab; secured hub com Routing Intent para tráfego privado.</td></tr>
+        <tr><td>{{c.names.fwEw}}</td><td>IP privado do hub</td><td>Inspeciona E-W entre as spokes A e B pela policy {{c.names.polEw}}.</td></tr>
+        <tr><td>{{c.names.vnetNs}}</td><td>{{c.network.vnetNs}}</td><td>VNet fora do vWAN que hospeda o firewall N-S e o Bastion.</td></tr>
+        <tr><td>{{c.names.fwNs}}</td><td>{{c.network.snetFw}}</td><td>Inspeciona a saída para a Internet pela policy {{c.names.polNs}}.</td></tr>
+        <tr><td>{{c.names.bastion}}</td><td>{{c.network.snetBastion}}</td><td>Acesso administrativo por navegador, propositalmente sem passar por firewall.</td></tr>
+        <tr><td>{{c.names.vnetA}} / {{c.names.vmA}}</td><td>{{c.network.vnetA}} · {{c.network.vmAIp}}</td><td>Spoke A e VM Windows usada nos testes.</td></tr>
+        <tr><td>{{c.names.vnetB}} / {{c.names.vmB}}</td><td>{{c.network.vnetB}} · {{c.network.vmBIp}}</td><td>Spoke B e VM Windows usada nos testes.</td></tr>
+        <tr><td>{{c.names.law}}</td><td>PerGB2018 · 30 dias</td><td>Destino dos diagnostic settings resource-specific e das consultas KQL.</td></tr>
+      </tbody>
+    </table>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az resource list -g {{c.names.rg}} --query "[].{name:name,type:type}" --output table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você sabe qual policy está associada a cada firewall antes de criar regras.</p>
+    </div>
+  </article>
+
+  <article class="step" id="arquitetura-rotas" data-nav="Rotas efetivas da VM-A">
+    <h3>Rotas efetivas esperadas na NIC da VM-A</h3>
+    <p class="what"><strong>O que:</strong> a NIC de {{c.names.vmA}} combina rotas de sistema, peering, Routing Intent e UDR.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> o firewall certo só vê o pacote se a rota efetiva apontar para ele. Antes de discutir regra, confirme a rota.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Prefixo</th><th>Próximo salto</th><th>Origem</th><th>Efeito</th></tr></thead>
+      <tbody>
+        <tr><td>{{c.network.vnetA}}</td><td>VNet local</td><td>Sistema</td><td>Tráfego interno da própria spoke.</td></tr>
+        <tr><td>{{c.network.vnetNs}}</td><td>VNet peering</td><td>Peering</td><td>Bastion e FW N-S chegam à VM sem passar pelo hub.</td></tr>
+        <tr><td>{{c.network.vhub}}</td><td>VNet peering</td><td>Conexão do hub</td><td>A conexão do vWAN é um peering gerenciado; ele aparece como <code>RemoteVnetToHubPeering_…</code>.</td></tr>
+        <tr><td>{{c.network.privateRanges}}</td><td><span class="ui">Virtual network gateway</span> = IP privado de {{c.names.fwEw}}</td><td>Routing Intent</td><td>Fluxos privados, como A↔B, são inspecionados pelo firewall E-W do hub.</td></tr>
+        <tr><td>0.0.0.0/0</td><td>VirtualAppliance = IP privado de {{c.names.fwNs}}</td><td>UDR {{c.names.rt}}</td><td>Saída para Internet é inspecionada pelo firewall N-S e sai com SNAT.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout note">
+      <p class="callout-title">Atenção ao rótulo</p>
+      <p>O Portal mostra as rotas do Routing Intent com o tipo <span class="ui">Virtual network gateway</span>, não <span class="ui">VirtualAppliance</span>. Isso é normal no vWAN: o que identifica o firewall do hub é o IP do próximo salto. Confira em <span class="path">{{c.names.fwEw}} › Overview</span> que ele é o IP privado do firewall.</p>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az network nic show-effective-route-table \
+  --resource-group {{c.names.rg}} \
+  --name {{c.names.nicA}} \
+  --output table</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> se A não alcança B, olhe primeiro as rotas privadas; se A não sai para Internet, olhe a rota default para {{c.names.fwNs}}.</p>
+    </div>
+  </article>
+
+  <article class="step" id="arquitetura-fluxos" data-nav="Quatro fluxos">
+    <h3>Os quatro fluxos do lab</h3>
+    <p class="what"><strong>O que:</strong> cada fluxo tem um caminho e uma pergunta operacional diferente.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> misturar caminhos leva a diagnósticos errados. Um Deny no firewall N-S não explica um RDP via Bastion; uma rota do hub não explica saída para Internet quando a UDR é mais específica para 0/0.</p>
+    </div>
+    <table class="data">
+      <thead><tr><th>Fluxo</th><th>Caminho</th><th>O que observar</th></tr></thead>
+      <tbody>
+        <tr><td>E-W</td><td>{{c.names.vmA}} ↔ {{c.names.vmB}} → hub {{c.names.vhub}} → {{c.names.fwEw}}</td><td>Regras Network na policy {{c.names.polEw}} e logs em AZFWNetworkRule.</td></tr>
+        <tr><td>Saída N-S</td><td>Spoke → UDR {{c.names.rt}} → {{c.names.fwNs}} → Internet</td><td>Regras Application/Network na policy {{c.names.polNs}} e SNAT pelo firewall.</td></tr>
+        <tr><td>Administração</td><td>Navegador → {{c.names.bastion}} → peering → VM</td><td>Bastion funciona sem regra nos firewalls; isso é proposital.</td></tr>
+      </tbody>
+    </table>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="powershell"><code>Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}
+Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 15</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> para cada teste você sabe qual firewall, policy e tabela KQL deveria mostrar evidência.</p>
+    </div>
+  </article>
+
+  <article class="step" id="arquitetura-dois-firewalls" data-nav="Por que dois firewalls">
+    <h3>Por que dois firewalls</h3>
+    <p class="what"><strong>O que:</strong> {{c.names.fwEw}} ensina tráfego privado no hub; {{c.names.fwNs}} ensina saída e inspeção N-S.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> secured Virtual Hub é excelente para trânsito privado, enquanto uma VNet N-S separada deixa UDR, Bastion e SNAT visíveis para o aluno.</p>
+    </div>
+    <div class="portal">
+      <h4>Trade-off didático</h4>
+      <ul>
+        <li>O E-W mostra Routing Intent para tráfego privado, sem peering direto entre A e B.</li>
+        <li>O N-S mostra UDR 0/0, SNAT e Application Rules de forma isolada. O DNAT fica para a demonstração do instrutor.</li>
+        <li>O desenho custa mais que um lab mínimo, mas reduz ambiguidade operacional.</li>
+      </ul>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Sem equivalente direto no CLI: esta é uma decisão de arquitetura do lab.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> ao criar uma regra, você sabe em qual policy ela pertence e qual fluxo ela afeta.</p>
+    </div>
+  </article>
+
+  <article class="step" id="arquitetura-bastion" data-nav="Bastion sem firewall">
+    <h3>Por que Bastion não passa pelo firewall</h3>
+    <p class="what"><strong>O que:</strong> o acesso administrativo usa {{c.names.bastion}} na VNet N-S e alcança as VMs pelo peering.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> isso mantém uma trilha de recuperação mesmo quando você quebra regras E-W ou N-S. É proposital no lab, não uma recomendação universal de produção.</p>
+    </div>
+    <div class="callout note">
+      <p class="callout-title">Ponto de ensino</p>
+      <p>Se Bastion funciona enquanto ping, RDP A→B ou saída Web falham, isso não contradiz o firewall. São fluxos diferentes.</p>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <p class="no-cli">Bastion é usado pelo Portal neste lab; os testes CLI dentro da VM aparecem nos exercícios.</p>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> você não usa sucesso no Bastion como prova de que E-W ou N-S está permitido.</p>
+    </div>
+  </article>
+
+  <div class="callout tip" id="arquitetura-learn" data-nav="Links Microsoft Learn">
+    <p class="callout-title">Links validados no Microsoft Learn</p>
+    <ul>
+      <li><a href="{{c.docs.routingIntent}}" target="_blank" rel="noopener">Virtual WAN Hub routing intent and routing policies</a></li>
+      <li><a href="https://learn.microsoft.com/azure/firewall/rule-processing" target="_blank" rel="noopener">Configure Azure Firewall rules: rule processing</a></li>
+      <li><a href="{{c.docs.bastion}}" target="_blank" rel="noopener">Azure Bastion SKU comparison</a></li>
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,11 @@
+// Ex5 — métricas exportadas do Azure Firewall.
+// Tabela: AzureMetrics.
+// Leia MetricName e os agregados Total/Average/Maximum para saúde, SNAT, hits de aplicação,
+// latência do próprio firewall (FirewallLatencyPng, ms) e capacidade observada (ObservedCapacity).
+AzureMetrics
+| where TimeGenerated > ago(2h)
+| where MetricName in ("ApplicationRuleHit", "SNATPortUtilization", "FirewallHealth", "FirewallLatencyPng", "ObservedCapacity")
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| where Firewall in~ ("fw-fwlab-ns", "fw-fwlab-ew")
+| project TimeGenerated, Firewall, MetricName, Total, Average, Maximum, Minimum, Count, UnitName, TimeGrain
+| order by TimeGenerated desc

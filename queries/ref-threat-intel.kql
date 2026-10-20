@@ -1,0 +1,8 @@
+// Referência — eventos de Threat Intelligence.
+// Tabela: AZFWThreatIntel.
+// Leia Action, destino/FQDN/URL e ThreatDescription para triagem rápida.
+AZFWThreatIntel
+| where TimeGenerated > ago(7d)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, SourceIp, SourcePort, DestinationIp, DestinationPort, Fqdn, TargetUrl, IsTlsInspected, Protocol, Action, ThreatDescription
+| order by TimeGenerated desc

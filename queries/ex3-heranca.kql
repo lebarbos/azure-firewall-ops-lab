@@ -1,0 +1,18 @@
+// Ex3 — decisões vindas da policy pai e do RCG corporativo.
+// Tabelas: AZFWNetworkRule e AZFWApplicationRule.
+// Leia a coluna Policy para diferenciar pai x filha: regras herdadas mostram a policy pai.
+union isfuzzy=true
+(
+    AZFWNetworkRule
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", SourceIp, DestinationIp, DestinationPort, Fqdn = "", Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+),
+(
+    AZFWApplicationRule
+    | where TimeGenerated > ago(4h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", SourceIp, DestinationIp = "", DestinationPort, Fqdn, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+)
+| where Policy in~ ("pol-fwlab-parent", "pol-fwlab-ew", "pol-fwlab-ns") or RuleCollectionGroup =~ "rcg-corp"
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, TipoLog, SourceIp, DestinationIp, DestinationPort, Fqdn, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc

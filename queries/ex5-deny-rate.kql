@@ -1,0 +1,10 @@
+// Ex5 — taxa de negações de aplicação por minuto no firewall N-S.
+// Tabela: AZFWApplicationRule.
+// Leia DeniesPorMinuto para correlacionar com o alerta ApplicationRuleHit.
+AZFWApplicationRule
+| where TimeGenerated > ago(30m)
+| where Action =~ "Deny"
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| where Firewall =~ "fw-fwlab-ns"
+| summarize DeniesPorMinuto = count() by bin(TimeGenerated, 1m), Firewall, Fqdn, Rule
+| order by TimeGenerated desc

@@ -1,0 +1,122 @@
+<section class="chapter" id="creditos" data-title="Créditos e licenças" data-progress="off">
+  <h2>Créditos e licenças</h2>
+  <p class="meta">Versão {{c.version}}</p>
+
+  <article class="step" id="creditos-lab" data-nav="Licença do lab">
+    <h3>Licença do lab</h3>
+    <p>Este laboratório é distribuído sob a licença <strong>MIT</strong>. Consulte o arquivo <code>LICENSE</code> do repositório.</p>
+    <p>Repositório: <a href="{{c.repo.url}}" target="_blank" rel="noopener">{{c.repo.url}}</a>.</p>
+  </article>
+
+  <article class="step" id="creditos-azfwmh" data-nav="AzFireWallPremium-MH">
+    <h3>Atribuição ao AzFireWallPremium-MH</h3>
+    <p>O roteiro do Ex6 foi inspirado e adaptado do projeto <strong>AzFireWallPremium-MH</strong>, licenciado em MIT, © 2023 Daniele Gaiulli.</p>
+    <p>Uso neste lab: TLS inspection com certificado auto-gerado, filtragem de URL, web categories e teste de IDPS. O texto foi reescrito em português e ajustado para a topologia deste laboratório; nenhuma credencial ou segredo do projeto original é reutilizado.</p>
+    <p>A licença completa do terceiro está reproduzida em <code>NOTICE.md</code>.</p>
+  </article>
+
+  <article class="step" id="creditos-docs" data-nav="Microsoft Learn">
+    <h3>Documentação Microsoft Learn usada</h3>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Tema</th>
+          <th>Documentação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Processamento e precedência de regras</td>
+          <td><a href="{{c.docs.ruleProcessing}}" target="_blank" rel="noopener">{{c.docs.ruleProcessing}}</a></td>
+        </tr>
+        <tr>
+          <td>Firewall Policy e rule collection groups</td>
+          <td><a href="{{c.docs.policyOverview}}" target="_blank" rel="noopener">{{c.docs.policyOverview}}</a></td>
+        </tr>
+        <tr>
+          <td>Hierarquia pai/filha no Firewall Manager</td>
+          <td><a href="{{c.docs.policyHierarchy}}" target="_blank" rel="noopener">{{c.docs.policyHierarchy}}</a></td>
+        </tr>
+        <tr>
+          <td>Virtual WAN Routing Intent</td>
+          <td><a href="{{c.docs.routingIntent}}" target="_blank" rel="noopener">{{c.docs.routingIntent}}</a></td>
+        </tr>
+        <tr>
+          <td>IP Groups</td>
+          <td><a href="{{c.docs.ipGroups}}" target="_blank" rel="noopener">{{c.docs.ipGroups}}</a></td>
+        </tr>
+        <tr>
+          <td>DNAT com Firewall Policy</td>
+          <td><a href="{{c.docs.dnat}}" target="_blank" rel="noopener">{{c.docs.dnat}}</a></td>
+        </tr>
+        <tr>
+          <td>Logs estruturados e diagnostic settings</td>
+          <td><a href="{{c.docs.structuredLogs}}" target="_blank" rel="noopener">{{c.docs.structuredLogs}}</a></td>
+        </tr>
+        <tr>
+          <td>Workbook do Azure Firewall</td>
+          <td><a href="{{c.docs.workbook}}" target="_blank" rel="noopener">{{c.docs.workbook}}</a></td>
+        </tr>
+        <tr>
+          <td>Métricas, tabelas <code>AZFW*</code> e referência de monitoramento</td>
+          <td><a href="{{c.docs.metrics}}" target="_blank" rel="noopener">{{c.docs.metrics}}</a></td>
+        </tr>
+        <tr>
+          <td>Alertas de métrica</td>
+          <td><a href="{{c.docs.metricAlert}}" target="_blank" rel="noopener">{{c.docs.metricAlert}}</a></td>
+        </tr>
+        <tr>
+          <td>Action Groups</td>
+          <td><a href="{{c.docs.actionGroup}}" target="_blank" rel="noopener">{{c.docs.actionGroup}}</a></td>
+        </tr>
+        <tr>
+          <td>Azure Firewall Premium, TLS, URL, web categories e IDPS</td>
+          <td><a href="{{c.docs.premiumFeatures}}" target="_blank" rel="noopener">{{c.docs.premiumFeatures}}</a></td>
+        </tr>
+        <tr>
+          <td>Certificados para TLS inspection</td>
+          <td><a href="{{c.docs.tlsCertificates}}" target="_blank" rel="noopener">{{c.docs.tlsCertificates}}</a></td>
+        </tr>
+        <tr>
+          <td>IDPS</td>
+          <td><a href="{{c.docs.idps}}" target="_blank" rel="noopener">{{c.docs.idps}}</a></td>
+        </tr>
+        <tr>
+          <td>Azure Bastion SKU e peering</td>
+          <td><a href="{{c.docs.bastion}}" target="_blank" rel="noopener">{{c.docs.bastion}}</a></td>
+        </tr>
+        <tr>
+          <td>Cloud Shell e troubleshooting</td>
+          <td><a href="{{c.docs.cloudShell}}" target="_blank" rel="noopener">{{c.docs.cloudShell}}</a></td>
+        </tr>
+        <tr>
+          <td>VM size usado no lab</td>
+          <td><a href="{{c.docs.vmSize}}" target="_blank" rel="noopener">{{c.docs.vmSize}}</a></td>
+        </tr>
+        <tr>
+          <td>Quota de vCPU</td>
+          <td><a href="{{c.docs.quota}}" target="_blank" rel="noopener">{{c.docs.quota}}</a></td>
+        </tr>
+        <tr>
+          <td>Soft-delete e purge de Key Vault</td>
+          <td><a href="https://learn.microsoft.com/azure/key-vault/general/key-vault-recovery" target="_blank" rel="noopener">https://learn.microsoft.com/azure/key-vault/general/key-vault-recovery</a></td>
+        </tr>
+        <tr>
+          <td>Azure CLI: resource group, Key Vault e recursos por tag</td>
+          <td><a href="https://learn.microsoft.com/cli/azure/group" target="_blank" rel="noopener">az group</a> · <a href="https://learn.microsoft.com/cli/azure/keyvault" target="_blank" rel="noopener">az keyvault</a> · <a href="https://learn.microsoft.com/cli/azure/resource" target="_blank" rel="noopener">az resource</a></td>
+        </tr>
+        <tr>
+          <td>Erros comuns de deployment</td>
+          <td><a href="https://learn.microsoft.com/azure/azure-resource-manager/troubleshooting/common-deployment-errors" target="_blank" rel="noopener">https://learn.microsoft.com/azure/azure-resource-manager/troubleshooting/common-deployment-errors</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </article>
+
+  <article class="step" id="creditos-marcas" data-nav="Marcas e status">
+    <h3>Marcas, status e escopo</h3>
+    <p>Microsoft, Azure, Windows Server e demais nomes de produtos Microsoft são marcas registradas ou marcas do grupo de empresas Microsoft. Outros nomes podem ser marcas de seus respectivos proprietários.</p>
+    <p>Este é um <strong>material de treinamento</strong>, não um produto oficial. Ele usa configurações simplificadas para fins didáticos e não deve ser aplicado em produção sem revisão de arquitetura, segurança, custos e change management.</p>
+    <p>Versão: <strong>{{c.version}}</strong>.</p>
+  </article>
+</section>

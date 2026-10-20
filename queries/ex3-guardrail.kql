@@ -1,0 +1,12 @@
+// Ex3 — guardrail corporativo negando RDP entre spokes.
+// Tabela: AZFWNetworkRule.
+// Leia Policy/RCG/RC/Rule para confirmar que o Deny veio do pai.
+AZFWNetworkRule
+| where TimeGenerated > ago(2h)
+| where SourceIp in ("10.110.1.4", "10.120.1.4")
+| where DestinationIp in ("10.110.1.4", "10.120.1.4")
+| where DestinationPort == 3389
+| where Action =~ "Deny"
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| project TimeGenerated, Firewall, SourceIp, SourcePort, DestinationIp, DestinationPort, Protocol, Action, ActionReason, Policy, RuleCollectionGroup, RuleCollection, Rule
+| order by TimeGenerated desc

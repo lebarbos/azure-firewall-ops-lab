@@ -1,0 +1,342 @@
+<section class="chapter" id="ex3" data-title="Ex3 · Policy pai e filhas">
+  <h2>Ex3 · Policy pai e filhas</h2>
+  <p class="meta">⏱ 45 min · Checkpoint C3</p>
+
+  <p>Neste exercício, você vai centralizar a governança com Firewall Manager: a policy pai impõe os guardrails corporativos, e as policies filhas mantêm as regras específicas de cada workload.</p>
+  <p>Você começa com o estado deixado pelo Ex1 e Ex2: observabilidade ativa, IP Groups criados, <code>{{c.rcg.baselineNs.name}}</code> e <code>{{c.rcg.baselineEw.name}}</code> funcionando, e as precedências de <code>{{c.rcg.wlA.name}}</code> e <code>{{c.rcg.wlB.name}}</code> já demonstradas.</p>
+
+  <div class="callout danger">
+    <p class="callout-title">Não rode o deploy da base depois deste exercício</p>
+    <p>Depois do Ex3, as policies <code>{{c.names.polEw}}</code> e <code>{{c.names.polNs}}</code> passam a herdar de <code>{{c.names.polParent}}</code>. Rodar o deploy da base de novo removeria o <code>basePolicy</code> das filhas. O <code>./scripts/deploy.sh</code> recusa reexecutar quando <code>{{c.names.rg}}</code> já existe, salvo se você usar <code>--force</code>.</p>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-title">Fontes usadas neste exercício</p>
+    <p>As regras de herança, processamento por tipo e restrições de policy foram validadas na documentação oficial: <a href="https://learn.microsoft.com/azure/firewall-manager/rule-hierarchy" target="_blank" rel="noopener">hierarquia de policies</a>, <a href="https://learn.microsoft.com/azure/firewall-manager/policy-overview" target="_blank" rel="noopener">policy overview</a>, <a href="https://learn.microsoft.com/azure/firewall/rule-processing" target="_blank" rel="noopener">rule processing</a> e <a href="https://learn.microsoft.com/azure/firewall/firewall-faq" target="_blank" rel="noopener">FAQ do Azure Firewall</a>.</p>
+  </div>
+
+  <article class="step" id="ex3-1" data-nav="3.1 Criar a policy pai">
+    <h3>3.1 · Criar a policy pai</h3>
+    <p class="what"><strong>O que:</strong> crie <code>{{c.names.polParent}}</code> como policy Premium na mesma região das filhas, com o RCG <code>{{c.rcg.corp.name}}</code> e a collection <code>{{c.rc.appCorp.name}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> a policy pai precisa estar na mesma região das filhas para a herança funcionar, e o tier precisa ser compatível com o que as filhas usam. Como o lab usa Azure Firewall Premium e os exercícios seguintes dependem de recursos Premium, o pai também será Premium.</p>
+      <p>O RCG <code>{{c.rcg.corp.name}}</code> usa prioridade <code>{{c.rcg.corp.priority}}</code>, um número "pior" de propósito. Mesmo assim, por estar no pai, ele será avaliado antes dos RCGs das filhas do mesmo tipo.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li><strong>Crie a policy.</strong> Abra <span class="path">Azure Firewall Manager › Security › Azure Firewall Policies</span> e clique em <span class="ui">+ Create Azure Firewall Policy</span>. Na aba <span class="ui">Basics</span>, preencha:
+          <ul>
+            <li><span class="ui">Resource group</span>: <code>{{c.names.rg}}</code></li>
+            <li><span class="ui">Name</span>: <code>{{c.names.polParent}}</code></li>
+            <li><span class="ui">Region</span>: a mesma das policies filhas</li>
+            <li><span class="ui">Policy tier</span>: <span class="ui">Premium</span></li>
+            <li><span class="ui">Parent policy</span>: <span class="ui">None</span> (ela é o pai)</li>
+          </ul>
+          <strong>Não use a aba <span class="ui">Rules</span> do assistente:</strong> ali as collections vão para grupos padrão, e o exercício precisa do grupo próprio <code>{{c.rcg.corp.name}}</code>. Clique em <span class="ui">Review + create</span> › <span class="ui">Create</span> e espere a implantação terminar.</li>
+        <li><strong>Crie o grupo.</strong> Abra <span class="path">Firewall Policies › {{c.names.polParent}} › Rules › Rule collections</span> e clique em <span class="ui">+ Add › Rule collection group</span>:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rcg.corp.name}}</code></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rcg.corp.priority}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li><strong>Crie a collection.</strong> Clique em <span class="ui">Refresh</span>, depois em <span class="ui">+ Add › Rule collection</span>, e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rc.appCorp.name}}</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>{{c.rc.appCorp.priority}}</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Allow</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>{{c.rcg.corp.name}}</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>{{c.rules.allowMicrosoftCorp}}</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>{{c.names.ipgSpokes}}</code></li>
+            <li><span class="ui">Protocol</span>: <code>Http:{{c.targets.httpPort}},Https:443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">FQDN</span></li>
+            <li><span class="ui">Destination</span>: <code>{{c.targets.baselineFqdn}}</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li>Clique em <span class="ui">Refresh</span> e confira <code>{{c.rc.appCorp.name}}</code> dentro de <code>{{c.rcg.corp.name}}</code> ({{c.rcg.corp.priority}}).</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>LOCATION=$(az group show -n {{c.names.rg}} --query location -o tsv)
+IPG_SPOKES_ID=$(az network ip-group show -g {{c.names.rg}} -n {{c.names.ipgSpokes}} --query id -o tsv)
+
+az network firewall policy create \
+  -g {{c.names.rg}} \
+  -n {{c.names.polParent}} \
+  -l "$LOCATION" \
+  --sku Premium
+
+az network firewall policy rule-collection-group create \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polParent}} \
+  -n {{c.rcg.corp.name}} \
+  --priority {{c.rcg.corp.priority}}
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polParent}} \
+  --rule-collection-group-name {{c.rcg.corp.name}} \
+  -n {{c.rc.appCorp.name}} \
+  --collection-priority {{c.rc.appCorp.priority}} \
+  --action Allow \
+  --rule-type ApplicationRule
+
+az network firewall policy rule-collection-group collection rule add \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polParent}} \
+  --rule-collection-group-name {{c.rcg.corp.name}} \
+  --collection-name {{c.rc.appCorp.name}} \
+  -n {{c.rules.allowMicrosoftCorp}} \
+  --rule-type ApplicationRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --protocols Http={{c.targets.httpPort}} Https=443 \
+  --target-fqdns {{c.targets.baselineFqdn}}</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> <code>{{c.names.polParent}}</code> existe, está como Premium e contém <code>{{c.rcg.corp.name}}</code> › <code>{{c.rc.appCorp.name}}</code> › <code>{{c.rules.allowMicrosoftCorp}}</code>.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex3-2" data-nav="3.2 Re-parent das filhas">
+    <h3>3.2 · Re-parent das policies filhas</h3>
+    <p class="what"><strong>O que:</strong> conecte <code>{{c.names.polEw}}</code> e <code>{{c.names.polNs}}</code> ao pai <code>{{c.names.polParent}}</code>.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> as duas policies já existem e estão associadas aos firewalls. Ao apontar cada uma para o pai, elas passam a herdar as regras de <code>{{c.names.polParent}}</code> sem perder as próprias. O Portal permite trocar o pai de uma policy existente. No CLI, o caminho usa <code>--set basePolicy.id=&lt;id&gt;</code>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Azure Firewall Manager › Security › Azure Firewall Policies › {{c.names.polEw}}</span>.</li>
+        <li>Defina a <span class="ui">Parent policy</span> como <code>{{c.names.polParent}}</code> e salve.</li>
+        <li>Faça o mesmo em <code>{{c.names.polNs}}</code>.</li>
+      </ol>
+      <p>As duas policies são independentes: dá para fazer as duas <strong>ao mesmo tempo</strong>, em abas separadas, sem esperar uma terminar para começar a outra. Depois, espere as duas voltarem a <span class="ui">Succeeded</span>.</p>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>PARENT_ID=$(az network firewall policy show \
+  -g {{c.names.rg}} \
+  -n {{c.names.polParent}} \
+  --query id -o tsv)
+
+for POLICY in {{c.names.polEw}} {{c.names.polNs}}; do
+  az network firewall policy update \
+    -g {{c.names.rg}} \
+    -n "$POLICY" \
+    --set basePolicy.id="$PARENT_ID"
+done
+
+for POLICY in {{c.names.polEw}} {{c.names.polNs}}; do
+  az network firewall policy show \
+    -g {{c.names.rg}} \
+    -n "$POLICY" \
+    --query "{policy:name,parent:basePolicy.id,state:provisioningState}" \
+    -o table
+done</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> as duas filhas mostram <code>{{c.names.polParent}}</code> como <span class="ui">Parent policy</span>.</p>
+    </div>
+  </article>
+
+  <article class="step" id="ex3-3" data-nav="3.3 Remover duplicidade na filha">
+    <h3>3.3 · Remover o allow duplicado da policy N-S</h3>
+    <p class="what"><strong>O que:</strong> remova <code>{{c.rules.allowMicrosoft}}</code> da filha <code>{{c.names.polNs}}</code>, porque <code>{{c.rules.allowMicrosoftCorp}}</code> no pai agora cobre o mesmo destino comum.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> regra comum duplicada em pai e filha dificulta troubleshooting. Se <code>{{c.rules.allowMicrosoft}}</code> for a única regra da collection <code>{{c.rc.appBaseline.name}}</code>, remova a collection inteira para deixar a intenção clara.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Firewall Policies › {{c.names.polNs}} › Rules › Rule collections</span> e localize o grupo <code>{{c.rcg.baselineNs.name}}</code> na lista.</li>
+        <li>Abra a collection <code>{{c.rc.appBaseline.name}}</code>.</li>
+        <li>Remova a regra <code>{{c.rules.allowMicrosoft}}</code>. Se ela for a única regra da collection, remova <code>{{c.rc.appBaseline.name}}</code> inteira.</li>
+        <li>Clique em <span class="ui">Save</span>.</li>
+        <li>Espere o provisioning voltar para <span class="ui">Succeeded</span> e aguarde mais 1–2 minutos para propagação.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code># O help local do az mostra --name como o nome da collection neste subcomando.
+# Use este caminho quando {{c.rules.allowMicrosoft}} for a única regra de {{c.rc.appBaseline.name}}.
+az network firewall policy rule-collection-group collection remove \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polNs}} \
+  --rule-collection-group-name {{c.rcg.baselineNs.name}} \
+  --name {{c.rc.appBaseline.name}}
+
+while [ "$(az network firewall policy show -g {{c.names.rg}} -n {{c.names.polNs}} --query provisioningState -o tsv)" != "Succeeded" ]; do
+  echo "Aguardando propagação da policy..."
+  sleep 30
+done
+sleep 120</code></pre>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  -g {{c.names.rg}} \
+  -n {{c.names.vmB}} \
+  --command-id RunPowerShellScript \
+  --scripts 'Invoke-WebRequest https://{{c.targets.allowedProbe}} -UseBasicParsing | Select-Object -ExpandProperty StatusCode' \
+  --query "value[0].message" \
+  -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Verifique:</strong> a VM-B continua acessando <code>{{c.targets.allowedProbe}}</code> com HTTP 200. A decisão deve vir do pai. A coluna <code>Policy</code> mostra <code>{{c.names.polParent}}</code>, e o RCG <code>{{c.rcg.corp.name}}</code> confirma que a regra veio do pai.</p>
+      <p>Teste na <strong>VM-B</strong>, pelo Bastion (PowerShell) ou pelo <span class="path">{{c.names.vmB}} › Operations › Run command › RunPowerShellScript</span>:</p>
+      <pre class="code" data-lang="powershell"><code>Invoke-WebRequest https://{{c.targets.allowedProbe}} -UseBasicParsing</code></pre>
+      {{kql:ex3-heranca}}
+    </div>
+  </article>
+
+  <article class="experiment" id="ex3-4" data-nav="3.4 Experimento · Allow do pai">
+    <h3>3.4 · Experimento: o Deny da filha ainda vence?</h3>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>O Deny de <code>{{c.targets.learn}}</code> para a VM-A, criado no Ex2 em <code>{{c.rcg.wlA.name}}</code> › <code>{{c.rc.appWlA.name}}</code>, continua valendo depois que o pai permite <code>{{c.targets.baselineFqdn}}</code>?</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Abra <span class="path">Virtual machines › {{c.names.vmA}} › Run command › RunPowerShellScript</span>.</li>
+        <li>Execute o teste para <code>https://{{c.targets.learn}}</code>.</li>
+        <li>Depois abra <span class="path">{{c.names.law}} › Logs</span> e rode a consulta do Ex2 ou a consulta <code>ex3-heranca</code> para ver qual RCG decidiu.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  -g {{c.names.rg}} \
+  -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing | Select-Object -ExpandProperty StatusCode' \
+  --query "value[0].message" \
+  -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> o resultado do teste da VM-A e o RCG que aparece no log. Só então abra a resposta.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p><strong>Não.</strong> O acesso passa. O Allow amplo <code>{{c.rules.allowMicrosoftCorp}}</code> no pai é avaliado antes dos RCGs da filha e fura o Deny <code>{{c.rules.denyLearn}}</code> da filha.</p>
+      <div class="callout tip">
+        <p class="callout-title">Lição de design</p>
+        <p>No pai, coloque guardrails corporativos, principalmente Deny, e infraestrutura comum. Allows específicos de workload ficam nas filhas para evitar que um Allow central amplo neutralize exceções locais.</p>
+      </div>
+    </details>
+  </article>
+
+  <article class="experiment" id="ex3-5" data-nav="3.5 Experimento · Guardrail RDP">
+    <h3>3.5 · Experimento: guardrail central para RDP E-W</h3>
+    <div class="predict">
+      <p class="predict-title">Previsão</p>
+      <p>Abra uma sessão RDP da VM-A para a VM-B e deixe a sessão aberta. Depois crie no pai um Deny TCP <code>{{c.targets.rdpPort}}</code> entre spokes. O que acontece com a sessão já aberta, um novo RDP, o ping e a sessão Bastion → VM-A?</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Conecte na VM-A pelo Bastion.</li>
+        <li>Dentro da VM-A, abra <span class="ui">mstsc</span>, conecte em <code>{{c.network.vmBIp}}</code> e deixe a sessão RDP aberta.</li>
+        <li>Abra <span class="path">Firewall Policies › {{c.names.polParent}} › Rules › Rule collections</span>.</li>
+        <li>Clique em <span class="ui">+ Add › Rule collection</span>: nome <code>{{c.rc.netCorpGuardrail.name}}</code>, tipo <span class="ui">Network</span>, prioridade <code>{{c.rc.netCorpGuardrail.priority}}</code>, ação <span class="ui">Deny</span> e grupo <code>{{c.rcg.corp.name}}</code>.</li>
+        <li>Adicione a regra <code>{{c.rules.denyRdpEw}}</code>: protocolo TCP, porta <code>{{c.targets.rdpPort}}</code>, origem <code>{{c.names.ipgSpokes}}</code>, destino <code>{{c.names.ipgSpokes}}</code>.</li>
+        <li>Salve, espere o provisioning voltar para <span class="ui">Succeeded</span> e aguarde mais 1–2 minutos.</li>
+      </ol>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>IPG_SPOKES_ID=$(az network ip-group show -g {{c.names.rg}} -n {{c.names.ipgSpokes}} --query id -o tsv)
+
+az network firewall policy rule-collection-group collection add-filter-collection \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polParent}} \
+  --rule-collection-group-name {{c.rcg.corp.name}} \
+  -n {{c.rc.netCorpGuardrail.name}} \
+  --collection-priority {{c.rc.netCorpGuardrail.priority}} \
+  --action Deny \
+  --rule-type NetworkRule
+
+az network firewall policy rule-collection-group collection rule add \
+  -g {{c.names.rg}} \
+  --policy-name {{c.names.polParent}} \
+  --rule-collection-group-name {{c.rcg.corp.name}} \
+  --collection-name {{c.rc.netCorpGuardrail.name}} \
+  -n {{c.rules.denyRdpEw}} \
+  --rule-type NetworkRule \
+  --source-ip-groups "$IPG_SPOKES_ID" \
+  --destination-ip-groups "$IPG_SPOKES_ID" \
+  --ip-protocols TCP \
+  --destination-ports {{c.targets.rdpPort}}
+
+while [ "$(az network firewall policy show -g {{c.names.rg}} -n {{c.names.polParent}} --query provisioningState -o tsv)" != "Succeeded" ]; do
+  echo "Aguardando propagação da policy pai..."
+  sleep 30
+done
+sleep 120</code></pre>
+      <pre class="code" data-lang="bash"><code>az vm run-command invoke \
+  -g {{c.names.rg}} \
+  -n {{c.names.vmA}} \
+  --command-id RunPowerShellScript \
+  --scripts 'Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}; Test-Connection {{c.network.vmBIp}} -Count 4' \
+  --query "value[0].message" \
+  -o tsv</code></pre>
+    </details>
+    <div class="verify">
+      <p><strong>Registre:</strong> o que aconteceu com a sessão RDP aberta, com um novo RDP, com o ping e com a sessão Bastion. Só então abra a resposta.</p>
+    </div>
+    <details class="answer">
+      <summary>Ver resposta</summary>
+      <p>A sessão RDP aberta cai: a documentação de processamento de regras afirma que, quando uma regra passa a negar um tráfego antes permitido, o Azure Firewall derruba as sessões existentes relevantes. Um novo RDP A→B falha, mas o ping continua funcionando porque o guardrail bloqueia apenas TCP <code>{{c.targets.rdpPort}}</code>.</p>
+      <p>A sessão Bastion → VM-A não cai, porque esse caminho usa o peering entre <code>{{c.names.vnetNs}}</code> e <code>{{c.names.vnetA}}</code>, sem passar pelo firewall. O RCG <code>{{c.rcg.corp.name}}</code> do pai, mesmo com prioridade <code>{{c.rcg.corp.priority}}</code>, vence o <code>{{c.rcg.baselineEw.name}}</code> da filha com prioridade <code>{{c.rcg.baselineEw.priority}}</code>, porque pai é processado antes da filha.</p>
+      {{kql:ex3-guardrail}}
+    </details>
+  </article>
+
+  <article class="step" id="ex3-6" data-nav="3.6 Auditar as mudanças">
+    <h3>3.6 · Auditar as mudanças com change tracking</h3>
+    <p class="what"><strong>O que:</strong> use o Azure Resource Graph para listar o que mudou nas rule collection groups durante este exercício, com valor anterior e novo.</p>
+    <div class="why">
+      <p><strong>Por que:</strong> numa hierarquia, a pergunta "quem mexeu na regra e o que era antes?" aparece logo depois de um incidente. O change tracking das rule collection groups responde <em>o que</em> mudou, sem você ter guardado um "antes"; o <strong>Activity Log</strong> responde <em>quem</em> mudou. O change tracking está em <strong>preview</strong>.</p>
+    </div>
+    <div class="portal">
+      <h4>Portal</h4>
+      <ol>
+        <li>Pesquise e abra <span class="ui">Resource Graph Explorer</span>.</li>
+        <li>Cole a consulta abaixo e clique em <span class="ui">Run query</span>. Ela roda no Resource Graph, não no Log Analytics.</li>
+        <li>Procure as mudanças dos passos 3.3 e 3.5: a remoção de <code>{{c.rules.allowMicrosoft}}</code> em <code>{{c.rcg.baselineNs.name}}</code> de <code>{{c.names.polNs}}</code> e o guardrail <code>{{c.rules.denyRdpEw}}</code> em <code>{{c.rcg.corp.name}}</code> de <code>{{c.names.polParent}}</code>.</li>
+        <li><strong>Quem fez a mudança?</strong> O change tracking não traz o usuário: nessa tabela, <code>changedBy</code> vem como <code>Unspecified</code>. Quem responde é o <strong>Activity Log</strong>. Rode o bloco abaixo no Cloud Shell e case cada linha com uma mudança do change tracking pelo horário: a coluna <code>quem</code> mostra o usuário ou a identidade que fez a alteração. O Activity Log registra quando a operação <strong>terminou</strong>, então o horário dele costuma vir alguns minutos depois do <code>Timestamp</code> do change tracking.</li>
+      </ol>
+      <pre class="code" data-lang="bash"><code>az monitor activity-log list -g {{c.names.rg}} --offset 1d \
+  --query "[?contains(operationName.value, 'ruleCollectionGroups') &amp;&amp; status.value=='Succeeded'].{quando:eventTimestamp, quem:caller, operacao:operationName.value}" -o table</code></pre>
+    </div>
+    <details class="cli">
+      <summary>CLI</summary>
+      <pre class="code" data-lang="bash"><code>az extension add --name resource-graph --upgrade
+az graph query -q "$(grep -v '^//' queries/ex3-change-tracking.kql)" --first 100 -o table</code></pre>
+    </details>
+    {{kql:ex3-change-tracking}}
+    <div class="verify">
+      <p><strong>Verifique:</strong> aparecem linhas de <code>{{c.names.polNs}}</code>/<code>{{c.rcg.baselineNs.name}}</code> e de <code>{{c.names.polParent}}</code>/<code>{{c.rcg.corp.name}}</code>, com <code>ChangeType</code> e, em <code>PreviousValue</code>/<code>NewValue</code>, a regra que saiu e o guardrail que entrou. Se ainda não aparecer nada, espere alguns minutos e rode de novo: o registro da mudança não é instantâneo. No Activity Log, os mesmos horários aparecem com o seu próprio usuário.</p>
+    </div>
+  </article>
+
+  <div class="checkpoint" id="ex3-c3" data-nav="Checkpoint C3">
+    <h3>Checkpoint C3</h3>
+    <p>Rode o checkpoint para confirmar que a herança ficou aplicada.</p>
+    <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C3</code></pre>
+    <p>O C3 verifica: <code>{{c.names.polParent}}</code> existe, as duas filhas apontam para o pai e <code>{{c.rules.allowMicrosoft}}</code> saiu da filha N-S. O guardrail do 3.5 não entra no checkpoint: o experimento é conferido pelo resultado do teste e pela KQL do próprio passo.</p>
+  </div>
+
+  <div class="callout tip">
+    <p class="callout-title">O que você aprendeu</p>
+    <ul>
+      <li>Policy pai é mecanismo de governança central: ela deve impor guardrails e padrões comuns.</li>
+      <li>Allows amplos no pai podem furar Denies específicos das filhas; use-os com cuidado.</li>
+      <li>A prioridade numérica não muda a regra principal: pai antes da filha, depois DNAT → Network → Application.</li>
+      <li>Mudanças de Allow para Deny podem derrubar sessões existentes que passem pelo Azure Firewall.</li>
+    </ul>
+  </div>
+</section>

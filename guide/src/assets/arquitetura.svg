@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc" viewBox="0 0 1000 750">
+  <title id="arch-title">Arquitetura do laboratório: E-W, N-S e administração separados</title>
+  <desc id="arch-desc">Linha azul: VM A à conexão do hub vWAN, firewall E-W e VM B. Linha verde: cada spoke ao firewall N-S externo por peering e UDR, depois Internet, com SNAT no IP público do firewall. Linha marrom tracejada: navegador ao Bastion, depois RDP às duas VMs por peering. Não existe peering A-B nem conexão da VNet N-S ao vWAN. O desenho não representa rotas efetivas medidas.</desc>
+  <defs>
+    <marker id="arch-arrow-ew" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#075a9c"/></marker>
+    <marker id="arch-arrow-ns" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#007b63"/></marker>
+    <marker id="arch-arrow-admin" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#8a4b00"/></marker>
+    <style>
+      .arch-text{font:14px system-ui,-apple-system,"Segoe UI",Arial,sans-serif;fill:#142d43}
+      .arch-title{font:700 17px system-ui,-apple-system,"Segoe UI",Arial,sans-serif;fill:#142d43}
+      .arch-note{font:12px system-ui,-apple-system,"Segoe UI",Arial,sans-serif;fill:#142d43}
+      .arch-box{fill:#fff;stroke:#537892;stroke-width:1.5}
+      .arch-ew{stroke:#075a9c;fill:none;stroke-width:4}
+      .arch-ns{stroke:#007b63;fill:none;stroke-width:4}
+      .arch-admin{stroke:#8a4b00;fill:none;stroke-width:3;stroke-dasharray:9 5}
+      .arch-legend-ew{fill:#075a9c}
+      .arch-legend-ns{fill:#007b63}
+      .arch-legend-admin{fill:#8a4b00}
+    </style>
+  </defs>
+  <rect x="0" y="0" width="1000" height="750" fill="#f7fbfe"/>
+
+  <rect x="235" y="20" width="530" height="150" rx="12" fill="#e6f0fc" stroke="#075a9c" stroke-width="2"/>
+  <text x="500" y="48" text-anchor="middle" class="arch-title">Virtual WAN Standard · {{c.names.vhub}}</text>
+  <text x="500" y="73" text-anchor="middle" class="arch-text">{{c.network.vhub}} · Routing Intent: somente Private Traffic</text>
+  <rect class="arch-box" x="327" y="90" width="346" height="58" rx="8"/>
+  <text x="500" y="114" text-anchor="middle" class="arch-title">{{c.names.fwEw}}</text>
+  <text x="500" y="136" text-anchor="middle" class="arch-text">Premium · policy {{c.names.polEw}}</text>
+
+  <rect class="arch-box" x="20" y="245" width="290" height="142" rx="12"/>
+  <text x="165" y="272" text-anchor="middle" class="arch-title">Spoke A · {{c.network.vnetA}}</text>
+  <text x="165" y="298" text-anchor="middle" class="arch-text">{{c.names.vmA}} · Windows Server</text>
+  <text x="165" y="324" text-anchor="middle" class="arch-text">{{c.network.vmAIp}} · HTTP preparado</text>
+  <text x="165" y="354" text-anchor="middle" class="arch-note">Sem IP público · sem peering A ↔ B</text>
+
+  <rect class="arch-box" x="690" y="245" width="290" height="142" rx="12"/>
+  <text x="835" y="272" text-anchor="middle" class="arch-title">Spoke B · {{c.network.vnetB}}</text>
+  <text x="835" y="298" text-anchor="middle" class="arch-text">{{c.names.vmB}} · Windows Server</text>
+  <text x="835" y="324" text-anchor="middle" class="arch-text">{{c.network.vmBIp}} · HTTP preparado</text>
+  <text x="835" y="354" text-anchor="middle" class="arch-note">Sem IP público · uma VM por spoke</text>
+
+  <path class="arch-ew" d="M165 245V194H355V148" marker-start="url(#arch-arrow-ew)" marker-end="url(#arch-arrow-ew)"/>
+  <path class="arch-ew" d="M645 148V194H835V245" marker-start="url(#arch-arrow-ew)" marker-end="url(#arch-arrow-ew)"/>
+  <text x="500" y="209" text-anchor="middle" class="arch-title">1 · E-W: conexões ao hub → firewall E-W</text>
+
+  <rect x="250" y="422" width="500" height="188" rx="12" fill="#e9f6f1" stroke="#007b63" stroke-width="2"/>
+  <text x="500" y="450" text-anchor="middle" class="arch-title">{{c.names.vnetNs}} · {{c.network.vnetNs}} · fora do vWAN</text>
+  <rect class="arch-box" x="276" y="466" width="448" height="57" rx="8"/>
+  <text x="500" y="489" text-anchor="middle" class="arch-text">{{c.names.fwNs}} · Premium · policy {{c.names.polNs}}</text>
+  <text x="500" y="512" text-anchor="middle" class="arch-note">AzureFirewallSubnet · {{c.network.snetFw}}</text>
+  <rect class="arch-box" x="276" y="539" width="448" height="54" rx="8"/>
+  <text x="500" y="562" text-anchor="middle" class="arch-text">{{c.names.bastion}} · Basic · RDP pelo navegador</text>
+  <text x="500" y="583" text-anchor="middle" class="arch-note">AzureBastionSubnet · {{c.network.snetBastion}}</text>
+
+  <path class="arch-ns" d="M235 387V493H276" marker-end="url(#arch-arrow-ns)"/>
+  <path class="arch-ns" d="M765 387V493H724" marker-end="url(#arch-arrow-ns)"/>
+  <text x="118" y="437" class="arch-note">2 · Peering + UDR</text>
+  <text x="788" y="437" class="arch-note">2 · Peering + UDR</text>
+  <path class="arch-ns" d="M724 495H918V610" marker-end="url(#arch-arrow-ns)"/>
+  <rect class="arch-box" x="840" y="614" width="140" height="48" rx="8"/>
+  <text x="910" y="644" text-anchor="middle" class="arch-text">Internet</text>
+  <text x="910" y="680" text-anchor="middle" class="arch-note">Saída com SNAT</text>
+
+  <path class="arch-admin" d="M110 620V566H276" marker-end="url(#arch-arrow-admin)"/>
+  <path class="arch-admin" d="M276 550H62V387" marker-end="url(#arch-arrow-admin)"/>
+  <path class="arch-admin" d="M724 550H964V387" marker-end="url(#arch-arrow-admin)"/>
+  <rect class="arch-box" x="20" y="620" width="205" height="44" rx="8"/>
+  <text x="122" y="648" text-anchor="middle" class="arch-text">3 · Navegador do aluno</text>
+  <text x="490" y="649" text-anchor="middle" class="arch-note">Administração ≠ teste E-W · propagação do hub preservada</text>
+
+  <rect x="20" y="702" width="960" height="34" rx="8" fill="#fff" stroke="#d2d0ce"/>
+  <line x1="44" y1="719" x2="104" y2="719" class="arch-ew"/>
+  <text x="114" y="724" class="arch-note arch-legend-ew">1 · E-W / azul</text>
+  <line x1="300" y1="719" x2="360" y2="719" class="arch-ns"/>
+  <text x="370" y="724" class="arch-note arch-legend-ns">2 · N-S (saída) / verde</text>
+  <line x1="610" y1="719" x2="670" y2="719" class="arch-admin"/>
+  <text x="680" y="724" class="arch-note arch-legend-admin">3 · Administração / tracejado</text>
+</svg>

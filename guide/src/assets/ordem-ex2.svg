@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ord-title ord-desc" viewBox="0 0 1000 440">
+  <title id="ord-title">Ordem de processamento em {{c.names.polNs}} depois do passo 2.1</title>
+  <desc id="ord-desc">Em cima, os três RCGs da policy N-S depois do passo 2.1. Embaixo, a ordem de processamento: a volta Network está vazia, porque não há collection Network; na volta Application, os RCGs seguem a prioridade do grupo: {{c.rcg.infrastructure.name}}, {{c.rcg.wlA.name}} e {{c.rcg.baselineNs.name}}.</desc>
+  <defs>
+    <marker id="ord-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10z" fill="#8ea9db"/></marker>
+    <style>
+      .ord-head{fill:#4472c4}
+      .ord-card{fill:#fff;stroke:#4472c4;stroke-width:2}
+      .ord-step{fill:#4472c4}
+      .ord-lane{fill:#f3f6fb;stroke:#c9d6ee}
+      .ord-h{font:700 14px "Segoe UI",Arial,sans-serif;fill:#fff}
+      .ord-hs{font:12.5px "Segoe UI",Arial,sans-serif;fill:#fff}
+      .ord-t{font:13px "Segoe UI",Arial,sans-serif;fill:#1b1a19}
+      .ord-tt{font:12px "Segoe UI",Arial,sans-serif;fill:#1b1a19}
+      .ord-title{font:700 17px "Segoe UI",Arial,sans-serif;fill:#1b1a19}
+      .ord-lab{font:700 13px "Segoe UI",Arial,sans-serif;fill:#1f3864}
+      .ord-note{font:12px "Segoe UI",Arial,sans-serif;fill:#323130}
+      .ord-flow{fill:none;stroke:#8ea9db;stroke-width:3;marker-end:url(#ord-arrow)}
+    </style>
+  </defs>
+
+  <text x="20" y="28" class="ord-title">{{c.names.polNs}} depois do 2.1</text>
+  <rect x="20" y="44" width="300" height="120" rx="10" class="ord-card"/>
+  <rect x="20" y="44" width="300" height="50" rx="10" class="ord-head"/>
+  <text x="34" y="66" class="ord-h">{{c.rcg.infrastructure.name}}</text>
+  <text x="34" y="85" class="ord-hs">Priority {{c.rcg.infrastructure.priority}}</text>
+  <text x="34" y="114" class="ord-t">• Application · {{c.rc.infra.priority}} · Allow</text>
+  <text x="48" y="130" class="ord-tt">{{c.rc.infra.name}}: Azure Storage (blob)</text>
+  <rect x="350" y="44" width="300" height="120" rx="10" class="ord-card"/>
+  <rect x="350" y="44" width="300" height="50" rx="10" class="ord-head"/>
+  <text x="364" y="66" class="ord-h">{{c.rcg.wlA.name}}</text>
+  <text x="364" y="85" class="ord-hs">Priority {{c.rcg.wlA.priority}}</text>
+  <text x="364" y="114" class="ord-t">• Application · {{c.rc.appWlA.priority}} · Deny</text>
+  <text x="378" y="130" class="ord-tt">{{c.rules.denyLearn}} (VM-A) · {{c.rules.denyBing}} (A e B)</text>
+  <rect x="680" y="44" width="300" height="120" rx="10" class="ord-card"/>
+  <rect x="680" y="44" width="300" height="50" rx="10" class="ord-head"/>
+  <text x="694" y="66" class="ord-h">{{c.rcg.baselineNs.name}}</text>
+  <text x="694" y="85" class="ord-hs">Priority {{c.rcg.baselineNs.priority}}</text>
+  <text x="694" y="114" class="ord-t">• Application · {{c.rc.appBaseline.priority}} · Allow</text>
+  <text x="708" y="130" class="ord-tt">{{c.rules.allowMicrosoft}}: {{c.targets.baselineFqdn}}</text>
+
+  <text x="20" y="200" class="ord-title">Ordem de processamento</text>
+
+  <rect x="10" y="214" width="980" height="56" rx="8" class="ord-lane"/>
+  <text x="22" y="238" class="ord-lab">1ª volta</text>
+  <text x="22" y="256" class="ord-lab">Network</text>
+  <text x="170" y="246" class="ord-tt">vazia: ainda não há nenhuma collection Network em {{c.names.polNs}}</text>
+
+  <rect x="10" y="280" width="980" height="72" rx="8" class="ord-lane"/>
+  <text x="22" y="312" class="ord-lab">2ª volta</text>
+  <text x="22" y="330" class="ord-lab">Application</text>
+  <rect x="170" y="288" width="220" height="56" rx="8" class="ord-step"/>
+  <text x="280" y="311" text-anchor="middle" class="ord-h">{{c.rcg.infrastructure.name}}</text>
+  <text x="280" y="331" text-anchor="middle" class="ord-hs">{{c.rc.infra.name}}</text>
+  <path d="M392 316H441" class="ord-flow"/>
+  <rect x="445" y="288" width="220" height="56" rx="8" class="ord-step"/>
+  <text x="555" y="311" text-anchor="middle" class="ord-h">{{c.rcg.wlA.name}}</text>
+  <text x="555" y="331" text-anchor="middle" class="ord-hs">{{c.rc.appWlA.name}}</text>
+  <path d="M667 316H716" class="ord-flow"/>
+  <rect x="720" y="288" width="220" height="56" rx="8" class="ord-step"/>
+  <text x="830" y="311" text-anchor="middle" class="ord-h">{{c.rcg.baselineNs.name}}</text>
+  <text x="830" y="331" text-anchor="middle" class="ord-hs">{{c.rc.appBaseline.name}}</text>
+
+  <text x="20" y="380" class="ord-note">A primeira regra que casa decide e encerra a avaliação. Sem match em nenhuma volta, o tráfego cai no deny implícito.</text>
+  <text x="20" y="400" class="ord-note">VM-A no Learn e as duas VMs no Bing param em {{c.rcg.wlA.name}}. A VM-B no Learn não casa em {{c.rcg.wlA.name}} e só é decidida em {{c.rcg.baselineNs.name}}.</text>
+  <text x="20" y="420" class="ord-note">A ordem é: tipo (volta), depois RCG, depois collection. O DNAT, quando existe, forma uma volta antes de todas.</text>
+</svg>

@@ -1,0 +1,19 @@
+// Ex4 — os mesmos dados que o Policy Analytics usa, agregados de hora em hora.
+// Tabelas: AZFWApplicationRuleAggregation e AZFWNetworkRuleAggregation (categorias *Aggregation do Ex1).
+// Leia Hits por Policy/RCG/collection/regra; regra sem linha aqui não teve tráfego na janela.
+union isfuzzy=true
+(
+    AZFWApplicationRuleAggregation
+    | where TimeGenerated > ago(8h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Application", Policy, RuleCollectionGroup, RuleCollection, Rule, Action, ActionReason, Destino = Fqdn, Hits = ApplicationRuleCount
+),
+(
+    AZFWNetworkRuleAggregation
+    | where TimeGenerated > ago(8h)
+    | project TimeGenerated, _ResourceId, TipoLog = "Network", Policy, RuleCollectionGroup, RuleCollection, Rule, Action, ActionReason, Destino = strcat(DestinationIp, ":", DestinationPort), Hits = NetworkRuleCount
+)
+| extend Firewall = tostring(extract(@"(?i)/azurefirewalls/([^/]+)$", 1, _ResourceId))
+| where Firewall =~ "fw-fwlab-ns"
+| extend Regra = iff(isempty(Rule), strcat("(", coalesce(ActionReason, "sem regra"), ")"), Rule)
+| summarize Hits = sum(Hits), Destinos = make_set(Destino, 5), UltimaHora = max(TimeGenerated) by TipoLog, Policy, RuleCollectionGroup, RuleCollection, Regra, Action
+| order by Hits desc
