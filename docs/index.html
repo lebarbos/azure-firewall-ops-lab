@@ -1856,7 +1856,7 @@ curl.exe --connect-timeout 10 --max-time 20 http://10.120.1.4/</code></pre>
   -o table</code></pre>
     </details>
     <div class="verify">
-      <p><strong>Verifique:</strong> Bastion conecta, mas <code>ping</code>, <code>Test-NetConnection</code>, <code>Invoke-WebRequest</code> e o <code>curl.exe</code> HTTP ainda falham ou retornam negação. Nas rotas, você deve reconhecer o prefixo local <code>10.110.0.0/16</code>, o peering para <code>10.130.0.0/16</code>, os ranges privados aprendidos pelo hub e <code>0.0.0.0/0</code> apontando para o firewall N-S.</p>
+      <p><strong>Verifique:</strong> Bastion conecta, mas <code>ping</code>, <code>Test-NetConnection</code>, <code>Invoke-WebRequest</code> e o <code>curl.exe</code> HTTP ainda falham ou retornam negação. <strong>A falha é o resultado esperado:</strong> ainda não existe nenhuma regra, então o default deny do Azure Firewall bloqueia o tráfego. Espere timeout no <code>ping</code> e no <code>curl.exe</code>, <code>TcpTestSucceeded : False</code> no <code>Test-NetConnection</code> e erro de conexão ou timeout no <code>Invoke-WebRequest</code>. Se algum teste funcionar, há uma regra ou rota inesperada. Nas rotas, você deve reconhecer o prefixo local <code>10.110.0.0/16</code>, o peering para <code>10.130.0.0/16</code>, os ranges privados aprendidos pelo hub e <code>0.0.0.0/0</code> apontando para o firewall N-S.</p>
     </div>
     <div class="predict">
       <p class="predict-title">Previsão</p>
@@ -1865,6 +1865,7 @@ curl.exe --connect-timeout 10 --max-time 20 http://10.120.1.4/</code></pre>
     <details class="answer">
       <summary>Ver resposta</summary>
       <p>Porque a administração entra pelo Bastion em <code>vnet-fwlab-ns</code> e chega à VM-A pelo peering com <code>vnet-fwlab-a</code>. Esse caminho não passa pelo firewall do hub nem pelo firewall N-S. O objetivo é separar acesso administrativo do fluxo que será inspecionado no exercício.</p>
+      <p>Já os testes de ping, porta 3389, HTTP para a VM-B e Internet <strong>devem falhar</strong> neste ponto: esse é o comportamento esperado, porque ainda não há regras e o default deny bloqueia o tráfego. Essa falha é a linha de base; nos próximos passos você cria as regras e vê o mesmo teste passar.</p>
       <p>Referência: <a href="https://learn.microsoft.com/en-us/azure/bastion/vnet-peering" target="_blank" rel="noopener">VNet peering and Azure Bastion architecture</a>.</p>
     </details>
   </article>
@@ -1918,17 +1919,81 @@ az network ip-group create \
     </div>
     <div class="portal">
       <h4>Portal</h4>
+      <div class="callout warn">
+        <p class="callout-title">Uma alteração por vez: espere a anterior terminar</p>
+        <p>Cada <span class="ui">Add</span> atualiza a policy inteira e leva alguns minutos. Enquanto o grupo ou a collection anterior ainda estiver sendo criado, <strong>não abra o próximo formulário</strong>. Antes de cada <span class="ui">+ Add</span>, clique em <span class="ui">Refresh</span> em <span class="ui">Rule collections</span> e confirme, em <span class="path">Overview</span> da policy, que o <span class="ui">Provisioning state</span> é <span class="ui">Succeeded</span>.</p>
+        <p>Se aparecer <em>"The firewall policy has been modified since first loading this page. Please refresh to get the latest updates."</em>, o formulário foi aberto antes da alteração anterior terminar. Feche o formulário, espere <span class="ui">Succeeded</span>, clique em <span class="ui">Refresh</span> e preencha de novo.</p>
+      </div>
+      <h4>Baseline leste-oeste (pol-fwlab-ew)</h4>
       <ol>
         <li>Abra <span class="path">Firewall Policies › pol-fwlab-ew › Rules › Rule collections</span>.</li>
-        <li>Clique em <span class="ui">+ Add › Rule collection group</span>, use o nome <code>rcg-baseline</code> e a prioridade <code>500</code> e clique em <span class="ui">Add</span>.</li>
-        <li>Clique em <span class="ui">+ Add › Rule collection</span>: nome <code>net-baseline-ew</code>, tipo <span class="ui">Network</span>, prioridade <code>100</code>, ação <span class="ui">Allow</span> e, em <span class="ui">Rule collection group</span>, <code>rcg-baseline</code>.</li>
-        <li>No mesmo formulário, crie a regra <code>allow-icmp</code>: protocolo ICMP, origem <code>ipg-fwlab-spokes</code>, destino <code>ipg-fwlab-spokes</code>, portas <code>*</code>.</li>
-        <li>Crie também a regra <code>allow-rdp</code>: protocolo TCP, porta <code>3389</code>, origem <code>ipg-fwlab-spokes</code>, destino <code>ipg-fwlab-spokes</code>. Clique em <span class="ui">Add</span>.</li>
+        <li><strong>Grupo.</strong> Clique em <span class="ui">+ Add › Rule collection group</span> e preencha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>rcg-baseline</code></li>
+            <li><span class="ui">Priority</span>: <code>500</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li><strong>Collection.</strong> Clique em <span class="ui">Refresh</span>, depois em <span class="ui">+ Add › Rule collection</span> e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>net-baseline-ew</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Network</span></li>
+            <li><span class="ui">Priority</span>: <code>100</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Allow</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>rcg-baseline</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha duas linhas.
+          <p><strong>Linha 1</strong> (permite ping entre as spokes):</p>
+          <ul>
+            <li><span class="ui">Name</span>: <code>allow-icmp</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>ipg-fwlab-spokes</code></li>
+            <li><span class="ui">Protocol</span>: <span class="ui">ICMP</span></li>
+            <li><span class="ui">Destination Ports</span>: <code>*</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Destination</span>: <code>ipg-fwlab-spokes</code></li>
+          </ul>
+          <p><strong>Linha 2</strong> (permite RDP entre as spokes):</p>
+          <ul>
+            <li><span class="ui">Name</span>: <code>allow-rdp</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>ipg-fwlab-spokes</code></li>
+            <li><span class="ui">Protocol</span>: <span class="ui">TCP</span></li>
+            <li><span class="ui">Destination Ports</span>: <code>3389</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Destination</span>: <code>ipg-fwlab-spokes</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li>Clique em <span class="ui">Refresh</span> e confira <code>net-baseline-ew</code> sob <code>rcg-baseline</code>, com duas regras.</li>
+      </ol>
+      <h4>Baseline norte-sul (pol-fwlab-ns)</h4>
+      <ol>
         <li>Abra <span class="path">Firewall Policies › pol-fwlab-ns › Rules › Rule collections</span>.</li>
-        <li>Clique em <span class="ui">+ Add › Rule collection group</span>, use o nome <code>rcg-baseline</code> e a prioridade <code>500</code> e clique em <span class="ui">Add</span>.</li>
-        <li>Clique em <span class="ui">+ Add › Rule collection</span>: nome <code>app-baseline</code>, tipo <span class="ui">Application</span>, prioridade <code>100</code>, ação <span class="ui">Allow</span> e, em <span class="ui">Rule collection group</span>, <code>rcg-baseline</code>.</li>
-        <li>No mesmo formulário, crie a regra <code>allow-microsoft</code>: origem <code>ipg-fwlab-spokes</code>, protocolos HTTP:80 e HTTPS:443, destino FQDN <code>*.microsoft.com</code>. Clique em <span class="ui">Add</span>.</li>
-        <li>Aguarde o provisioning da policy voltar para <span class="ui">Succeeded</span> e mais 1–2 minutos para propagação.</li>
+        <li><strong>Grupo.</strong> Clique em <span class="ui">+ Add › Rule collection group</span> e preencha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>rcg-baseline</code></li>
+            <li><span class="ui">Priority</span>: <code>500</code></li>
+          </ul>
+          Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li><strong>Collection.</strong> Clique em <span class="ui">Refresh</span>, depois em <span class="ui">+ Add › Rule collection</span> e preencha o cabeçalho:
+          <ul>
+            <li><span class="ui">Name</span>: <code>app-baseline</code></li>
+            <li><span class="ui">Rule collection type</span>: <span class="ui">Application</span></li>
+            <li><span class="ui">Priority</span>: <code>100</code></li>
+            <li><span class="ui">Rule collection action</span>: <span class="ui">Allow</span></li>
+            <li><span class="ui">Rule collection group</span>: <code>rcg-baseline</code></li>
+          </ul>
+          Na tabela <span class="ui">Rules</span>, preencha uma linha:
+          <ul>
+            <li><span class="ui">Name</span>: <code>allow-microsoft</code></li>
+            <li><span class="ui">Source type</span>: <span class="ui">IP Group</span></li>
+            <li><span class="ui">Source</span>: <code>ipg-fwlab-spokes</code></li>
+            <li><span class="ui">Protocol</span>: <code>Http:80,Https:443</code></li>
+            <li><span class="ui">Destination Type</span>: <span class="ui">FQDN</span></li>
+            <li><span class="ui">Destination</span>: <code>*.microsoft.com</code></li>
+          </ul>
+          Deixe <span class="ui">TLS inspection</span> desmarcado. Clique em <span class="ui">Add</span> e espere <span class="ui">Succeeded</span>.</li>
+        <li>Clique em <span class="ui">Refresh</span> e confira <code>app-baseline</code> sob <code>rcg-baseline</code>, com uma regra.</li>
+        <li>Depois do último <span class="ui">Succeeded</span>, espere mais 1 a 2 minutos para a propagação antes de testar no passo 1.5.</li>
       </ol>
     </div>
     <details class="cli">
