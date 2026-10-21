@@ -262,8 +262,9 @@ Invoke-WebRequest https://{{c.targets.webCategorySample}} -UseBasicParsing</code
       <summary>Teste via Run Command</summary>
       <pre class="code" data-lang="bash"><code>az vm run-command invoke -g '{{c.names.rg}}' -n '{{c.names.vmA}}' \
   --command-id RunPowerShellScript \
-  --scripts 'Invoke-WebRequest https://{{c.targets.tlsUrlAllowed}} -UseBasicParsing; Invoke-WebRequest https://{{c.targets.tlsUrlDenied}} -UseBasicParsing; Invoke-WebRequest https://{{c.targets.webCategorySample}} -UseBasicParsing' \
+  --scripts 'foreach ($u in "https://{{c.targets.tlsUrlAllowed}}", "https://{{c.targets.tlsUrlDenied}}", "https://{{c.targets.webCategorySample}}") { try { "$u -> " + (Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 30).StatusCode } catch { "$u -> " + $_.Exception.Message } }' \
   --query "value[0].message" -o tsv</code></pre>
+      <p>O script imprime só o código ou o erro de cada URL: sem isso, o Run Command mostraria o HTML das páginas e cortaria a saída em 4.096 bytes. Uma URL negada pelo firewall com TLS inspection volta como erro HTTP <code>470</code>.</p>
     </details>
     <div class="verify">
       <p><strong>Registre:</strong> o resultado dos três testes. Só então abra a resposta, que também mostra como conferir o emissor do certificado visto pela VM-A.</p>
@@ -281,7 +282,7 @@ $cert | Format-List Subject, Issuer, Thumbprint
 $ssl.Dispose()
 $tcp.Dispose()</code></pre>
       <p>No navegador, a mesma prova aparece no cadeado da barra de endereço: abra os detalhes do certificado e confira o emissor. Ele deve apontar para a CA do lab, não diretamente para a CA pública original do site.</p>
-      <p><strong>Verifique:</strong> o emissor do certificado observado pela VM-A é a CA instalada no passo 6.2.</p>
+      <p><strong>Verifique:</strong> o emissor do certificado observado pela VM-A é a CA do Azure Firewall Manager (<code>CN=Azure Firewall Manager CA</code>), que o firewall usa para assinar os certificados sob demanda, e não a CA pública do site. A VM-A confia nela por causa da CA instalada no passo 6.2.</p>
     </details>
   </article>
 
@@ -313,17 +314,17 @@ $tcp.Dispose()</code></pre>
         <li>Abra <span class="path">Virtual machines › {{c.names.vmA}} › Connect › Bastion</span> e entre com <code>{{c.vm.adminUsername}}</code> e a senha do Ex0.</li>
         <li>Abra <span class="path">Start › Windows PowerShell</span> e execute o comando abaixo. Ele faz uma requisição HTTP com o User-Agent que a assinatura <code>{{c.targets.idpsSignatureId}}</code> reconhece.</li>
       </ol>
-      <pre class="code" data-lang="powershell"><code>curl.exe -A "{{c.targets.idpsUserAgent}}" {{c.targets.idpsProbeUrl}}</code></pre>
+      <pre class="code" data-lang="powershell"><code>curl.exe --connect-timeout 10 --max-time 20 -A "{{c.targets.idpsUserAgent}}" {{c.targets.idpsProbeUrl}}</code></pre>
     </div>
     <details class="cli">
       <summary>Teste via Run Command</summary>
       <pre class="code" data-lang="bash"><code>az vm run-command invoke -g '{{c.names.rg}}' -n '{{c.names.vmA}}' \
   --command-id RunPowerShellScript \
-  --scripts 'curl.exe -A "{{c.targets.idpsUserAgent}}" {{c.targets.idpsProbeUrl}}' \
+  --scripts 'curl.exe --connect-timeout 10 --max-time 20 -A "{{c.targets.idpsUserAgent}}" {{c.targets.idpsProbeUrl}}' \
   --query "value[0].message" -o tsv</code></pre>
     </details>
     <div class="verify">
-      <p><strong>Verifique:</strong> a conexão é bloqueada ou reiniciada, e os logs de IDPS mostram a assinatura <code>{{c.targets.idpsSignatureId}}</code>.</p>
+      <p><strong>Verifique:</strong> a conexão é bloqueada ou reiniciada (o <code>curl.exe</code> termina por timeout, graças ao <code>--max-time 20</code>), e os logs de IDPS mostram a assinatura <code>{{c.targets.idpsSignatureId}}</code>.</p>
       <p>A CA do TLS está no pai e o IDPS está na filha <code>{{c.names.polNs}}</code>: o modo <span class="ui">Alert and Deny</span> da filha bloqueia mesmo com o pai sem IDPS, e a inspeção usa a CA herdada do pai.</p>
     </div>
   </article>
@@ -351,7 +352,7 @@ $tcp.Dispose()</code></pre>
       <p class="no-cli">Use o Portal neste passo. As consultas KQL são embutidas no guia para cópia direta; o checkpoint C6 automatiza a checagem mínima.</p>
     </details>
     <div class="verify">
-      <p><strong>Como ler:</strong> em <code>ex6-tls-url-categoria</code>, procure <code>IsTlsInspected == true</code>, <code>TargetUrl</code> preenchido para <code>{{c.targets.tlsUrlAllowed}}</code> ou <code>{{c.targets.tlsUrlDenied}}</code>, e <code>WebCategory</code> preenchida para a regra <code>{{c.rules.denyGambling}}</code>. Em <code>ex6-idps</code>, procure <code>SignatureId == {{c.targets.idpsSignatureId}}</code>, ação de bloqueio e a origem <code>{{c.network.vmAIp}}</code>.</p>
+      <p><strong>Como ler:</strong> em <code>ex6-tls-url-categoria</code>, procure <code>IsTlsInspected == true</code>, <code>TargetUrl</code> preenchido para <code>{{c.targets.tlsUrlAllowed}}</code> ou <code>{{c.targets.tlsUrlDenied}}</code>, e <code>WebCategory</code> preenchida para a regra <code>{{c.rules.denyGambling}}</code>. Em <code>ex6-idps</code>, procure <code>SignatureId == {{c.targets.idpsSignatureId}}</code>, ação de bloqueio (<code>drop</code>) e a origem. Como a saída passa pelo firewall N-S com SNAT, a origem no log do IDPS aparece como o IP do firewall na VNet N-S (por exemplo <code>10.130.0.6</code>), e não como <code>{{c.network.vmAIp}}</code>.</p>
     </div>
   </article>
 

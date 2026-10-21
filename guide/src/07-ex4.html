@@ -128,6 +128,7 @@ az monitor log-analytics query \
     {{kql:ex4-policy-analytics}}
     <div class="verify">
       <p><strong>Verifique:</strong> a consulta devolve linhas com <code>Policy</code>, RCG, collection e regra, e a coluna <code>Hits</code> soma os acessos de cada hora. Se não houver linhas, a primeira agregação ainda não aconteceu.</p>
+      <p>A agregação é horária: o tráfego do Ex3 só aparece depois do fechamento da hora seguinte. Se você acabou de terminar o Ex3, <code>{{c.rules.denyLearn}}</code> ainda mostra os hits antigos; a resposta do 4.2 (sem hits novos) só fica visível na agregação seguinte, cerca de 1 h depois.</p>
     </div>
   </article>
 
