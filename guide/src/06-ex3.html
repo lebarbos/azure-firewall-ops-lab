@@ -85,14 +85,7 @@ az network firewall policy rule-collection-group collection add-filter-collectio
   -n {{c.rc.appCorp.name}} \
   --collection-priority {{c.rc.appCorp.priority}} \
   --action Allow \
-  --rule-type ApplicationRule
-
-az network firewall policy rule-collection-group collection rule add \
-  -g {{c.names.rg}} \
-  --policy-name {{c.names.polParent}} \
-  --rule-collection-group-name {{c.rcg.corp.name}} \
-  --collection-name {{c.rc.appCorp.name}} \
-  -n {{c.rules.allowMicrosoftCorp}} \
+  --rule-name {{c.rules.allowMicrosoftCorp}} \
   --rule-type ApplicationRule \
   --source-ip-groups "$IPG_SPOKES_ID" \
   --protocols Http={{c.targets.httpPort}} Https=443 \
@@ -257,14 +250,7 @@ az network firewall policy rule-collection-group collection add-filter-collectio
   -n {{c.rc.netCorpGuardrail.name}} \
   --collection-priority {{c.rc.netCorpGuardrail.priority}} \
   --action Deny \
-  --rule-type NetworkRule
-
-az network firewall policy rule-collection-group collection rule add \
-  -g {{c.names.rg}} \
-  --policy-name {{c.names.polParent}} \
-  --rule-collection-group-name {{c.rcg.corp.name}} \
-  --collection-name {{c.rc.netCorpGuardrail.name}} \
-  -n {{c.rules.denyRdpEw}} \
+  --rule-name {{c.rules.denyRdpEw}} \
   --rule-type NetworkRule \
   --source-ip-groups "$IPG_SPOKES_ID" \
   --destination-ip-groups "$IPG_SPOKES_ID" \
@@ -280,9 +266,10 @@ sleep 120</code></pre>
   -g {{c.names.rg}} \
   -n {{c.names.vmA}} \
   --command-id RunPowerShellScript \
-  --scripts 'Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}; Test-Connection {{c.network.vmBIp}} -Count 4' \
+  --scripts 'Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}} -WarningAction SilentlyContinue | Select-Object ComputerName, RemotePort, TcpTestSucceeded | Format-List; Test-Connection {{c.network.vmBIp}} -Count 4 -Quiet' \
   --query "value[0].message" \
   -o tsv</code></pre>
+      <p>O Run Command testa o novo RDP e o ping. A sessão RDP que ficou aberta e a sessão Bastion → VM-A são interativas: observe-as só pelo Portal (o Bastion Basic não oferece túnel por CLI).</p>
     </details>
     <div class="verify">
       <p><strong>Registre:</strong> o que aconteceu com a sessão RDP aberta, com um novo RDP, com o ping e com a sessão Bastion. Só então abra a resposta.</p>
@@ -315,7 +302,8 @@ sleep 120</code></pre>
     <details class="cli">
       <summary>CLI</summary>
       <pre class="code" data-lang="bash"><code>az extension add --name resource-graph --upgrade
-az graph query -q "$(grep -v '^//' queries/ex3-change-tracking.kql)" --first 100 -o table</code></pre>
+az graph query -q "$(grep -v '^//' queries/ex3-change-tracking.kql)" --first 100 --query data -o json</code></pre>
+      <p>Com <code>-o table</code> o CLI imprime só o resumo da consulta (contagem e token de paginação), não as linhas. Por isso o exemplo usa <code>--query data -o json</code>.</p>
     </details>
     {{kql:ex3-change-tracking}}
     <div class="verify">

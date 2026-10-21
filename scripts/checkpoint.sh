@@ -289,9 +289,6 @@ run_checkpoint() {
       check "RCG wl-b de volta em 300" rcg_priority_is "$pol_ns" "$(contract_get '.rcg.wlB.name')" "$(contract_get '.rcg.wlB.priority')"
       check "Collection temporária $(contract_get '.rc.netWlBTemp.name') ausente" rc_absent "$pol_ns" "$(contract_get '.rcg.wlB.name')" "$(contract_get '.rc.netWlBTemp.name')"
       check "Collection temporária $(contract_get '.rc.appWlBDeny.name') ausente" rc_absent "$pol_ns" "$(contract_get '.rcg.wlB.name')" "$(contract_get '.rc.appWlBDeny.name')"
-      check "KQL mostra $(contract_get '.rules.denyLearn')" kql_count_positive "AZFWApplicationRule | where TimeGenerated > ago(2h) | where Rule == '$(contract_get '.rules.denyLearn')' | count"
-      check "KQL mostra $(contract_get '.rules.allowLearn')" kql_count_positive "AZFWApplicationRule | where TimeGenerated > ago(2h) | where Rule == '$(contract_get '.rules.allowLearn')' | count"
-      check "KQL mostra $(contract_get '.rules.allowHttpsAny')" kql_count_positive "AZFWNetworkRule | where TimeGenerated > ago(2h) | where Rule == '$(contract_get '.rules.allowHttpsAny')' | count"
       ;;
     C3)
       check "Policy pai existe" exists_resource "$(policy_id "$(contract_name polParent)")" "2023-09-01"

@@ -273,8 +273,8 @@ az network firewall policy rule-collection-group collection rule add \
   -g {{c.names.rg}} \
   --policy-name {{c.names.polEw}} \
   --rule-collection-group-name {{c.rcg.baselineEw.name}} \
-  --name {{c.rc.netBaselineEw.name}} \
-  --rule-name {{c.rules.allowRdp}} \
+  --collection-name {{c.rc.netBaselineEw.name}} \
+  --name {{c.rules.allowRdp}} \
   --rule-type NetworkRule \
   --source-ip-groups "$IPG_SPOKES_ID" \
   --destination-ip-groups "$IPG_SPOKES_ID" \
@@ -331,7 +331,7 @@ Invoke-WebRequest https://{{c.targets.bing}} -UseBasicParsing</code></pre>
   -g {{c.names.rg}} \
   -n {{c.names.vmA}} \
   --command-id RunPowerShellScript \
-  --scripts 'ping {{c.network.vmBIp}}; Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}; try { Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Message }; try { Invoke-WebRequest https://{{c.targets.bing}} -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Message }' \
+  --scripts 'ping {{c.network.vmBIp}}; Test-NetConnection {{c.network.vmBIp}} -Port {{c.targets.rdpPort}}; try { Invoke-WebRequest https://{{c.targets.learn}} -UseBasicParsing -TimeoutSec 30 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }; try { Invoke-WebRequest https://{{c.targets.bing}} -UseBasicParsing -TimeoutSec 30 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }' \
   --query "value[0].message" \
   -o tsv</code></pre>
     </details>

@@ -2021,8 +2021,8 @@ az network firewall policy rule-collection-group collection rule add \
   -g rg-fwlab \
   --policy-name pol-fwlab-ew \
   --rule-collection-group-name rcg-baseline \
-  --name net-baseline-ew \
-  --rule-name allow-rdp \
+  --collection-name net-baseline-ew \
+  --name allow-rdp \
   --rule-type NetworkRule \
   --source-ip-groups "$IPG_SPOKES_ID" \
   --destination-ip-groups "$IPG_SPOKES_ID" \
@@ -2079,7 +2079,7 @@ Invoke-WebRequest https://www.bing.com -UseBasicParsing</code></pre>
   -g rg-fwlab \
   -n vm-fwlab-a \
   --command-id RunPowerShellScript \
-  --scripts 'ping 10.120.1.4; Test-NetConnection 10.120.1.4 -Port 3389; try { Invoke-WebRequest https://learn.microsoft.com -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Message }; try { Invoke-WebRequest https://www.bing.com -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Message }' \
+  --scripts 'ping 10.120.1.4; Test-NetConnection 10.120.1.4 -Port 3389; try { Invoke-WebRequest https://learn.microsoft.com -UseBasicParsing -TimeoutSec 30 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }; try { Invoke-WebRequest https://www.bing.com -UseBasicParsing -TimeoutSec 30 | Select-Object -ExpandProperty StatusCode } catch { $_.Exception.Message }' \
   --query "value[0].message" \
   -o tsv</code></pre>
     </details>
@@ -3057,7 +3057,7 @@ AZFWFlowTrace
     <h3>Checkpoint C2</h3>
     <p>Execute o checkpoint somente depois de restaurar o estado final do exercício.</p>
     <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C2</code></pre>
-    <p>O C2 exige <code>rcg-wl-b</code> de volta em prioridade <code>300</code>, <code>net-wl-b-temp</code> e <code>app-wl-b-deny</code> removidas, hits em <code>deny-learn</code>, em <code>allow-learn</code> e em <code>allow-https-any</code>.</p>
+    <p>O C2 exige <code>rcg-wl-b</code> de volta em prioridade <code>300</code> e as collections temporárias <code>net-wl-b-temp</code> e <code>app-wl-b-deny</code> removidas. Ele confere só o estado final da policy, para que o Ex3 comece limpo.</p>
   </div>
 
   <div class="callout note">
@@ -3159,14 +3159,7 @@ az network firewall policy rule-collection-group collection add-filter-collectio
   -n app-corp \
   --collection-priority 200 \
   --action Allow \
-  --rule-type ApplicationRule
-
-az network firewall policy rule-collection-group collection rule add \
-  -g rg-fwlab \
-  --policy-name pol-fwlab-parent \
-  --rule-collection-group-name rcg-corp \
-  --collection-name app-corp \
-  -n allow-microsoft-corp \
+  --rule-name allow-microsoft-corp \
   --rule-type ApplicationRule \
   --source-ip-groups "$IPG_SPOKES_ID" \
   --protocols Http=80 Https=443 \
@@ -3349,14 +3342,7 @@ az network firewall policy rule-collection-group collection add-filter-collectio
   -n net-corp-guardrail \
   --collection-priority 100 \
   --action Deny \
-  --rule-type NetworkRule
-
-az network firewall policy rule-collection-group collection rule add \
-  -g rg-fwlab \
-  --policy-name pol-fwlab-parent \
-  --rule-collection-group-name rcg-corp \
-  --collection-name net-corp-guardrail \
-  -n deny-rdp-east-west \
+  --rule-name deny-rdp-east-west \
   --rule-type NetworkRule \
   --source-ip-groups "$IPG_SPOKES_ID" \
   --destination-ip-groups "$IPG_SPOKES_ID" \
@@ -3372,9 +3358,10 @@ sleep 120</code></pre>
   -g rg-fwlab \
   -n vm-fwlab-a \
   --command-id RunPowerShellScript \
-  --scripts 'Test-NetConnection 10.120.1.4 -Port 3389; Test-Connection 10.120.1.4 -Count 4' \
+  --scripts 'Test-NetConnection 10.120.1.4 -Port 3389 -WarningAction SilentlyContinue | Select-Object ComputerName, RemotePort, TcpTestSucceeded | Format-List; Test-Connection 10.120.1.4 -Count 4 -Quiet' \
   --query "value[0].message" \
   -o tsv</code></pre>
+      <p>O Run Command testa o novo RDP e o ping. A sessão RDP que ficou aberta e a sessão Bastion → VM-A são interativas: observe-as só pelo Portal (o Bastion Basic não oferece túnel por CLI).</p>
     </details>
     <div class="verify">
       <p><strong>Registre:</strong> o que aconteceu com a sessão RDP aberta, com um novo RDP, com o ping e com a sessão Bastion. Só então abra a resposta.</p>
@@ -3419,7 +3406,8 @@ AZFWNetworkRule
     <details class="cli">
       <summary>CLI</summary>
       <pre class="code" data-lang="bash"><code>az extension add --name resource-graph --upgrade
-az graph query -q "$(grep -v '^//' queries/ex3-change-tracking.kql)" --first 100 -o table</code></pre>
+az graph query -q "$(grep -v '^//' queries/ex3-change-tracking.kql)" --first 100 --query data -o json</code></pre>
+      <p>Com <code>-o table</code> o CLI imprime só o resumo da consulta (contagem e token de paginação), não as linhas. Por isso o exemplo usa <code>--query data -o json</code>.</p>
     </details>
 <figure class="code-figure"><figcaption>queries/ex3-change-tracking.kql</figcaption><pre class="code" data-lang="kql"><code>// Ex3 — change tracking (preview): o que mudou nas rule collection groups das policies do lab.
 // Rode no Azure Resource Graph Explorer (não no Log Analytics). Tabela: networkresourcechanges.
@@ -3615,6 +3603,7 @@ union isfuzzy=true
 </code></pre></figure>
     <div class="verify">
       <p><strong>Verifique:</strong> a consulta devolve linhas com <code>Policy</code>, RCG, collection e regra, e a coluna <code>Hits</code> soma os acessos de cada hora. Se não houver linhas, a primeira agregação ainda não aconteceu.</p>
+      <p>A agregação é horária: o tráfego do Ex3 só aparece depois do fechamento da hora seguinte. Se você acabou de terminar o Ex3, <code>deny-learn</code> ainda mostra os hits antigos; a resposta do 4.2 (sem hits novos) só fica visível na agregação seguinte, cerca de 1 h depois.</p>
     </div>
   </article>
 
@@ -4224,8 +4213,9 @@ Invoke-WebRequest https://www.bitstarz60.com -UseBasicParsing</code></pre>
       <summary>Teste via Run Command</summary>
       <pre class="code" data-lang="bash"><code>az vm run-command invoke -g 'rg-fwlab' -n 'vm-fwlab-a' \
   --command-id RunPowerShellScript \
-  --scripts 'Invoke-WebRequest https://en.wikipedia.org/wiki/Firewall -UseBasicParsing; Invoke-WebRequest https://en.wikipedia.org/wiki/Proxy_server -UseBasicParsing; Invoke-WebRequest https://www.bitstarz60.com -UseBasicParsing' \
+  --scripts 'foreach ($u in "https://en.wikipedia.org/wiki/Firewall", "https://en.wikipedia.org/wiki/Proxy_server", "https://www.bitstarz60.com") { try { "$u -> " + (Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 30).StatusCode } catch { "$u -> " + $_.Exception.Message } }' \
   --query "value[0].message" -o tsv</code></pre>
+      <p>O script imprime só o código ou o erro de cada URL: sem isso, o Run Command mostraria o HTML das páginas e cortaria a saída em 4.096 bytes. Uma URL negada pelo firewall com TLS inspection volta como erro HTTP <code>470</code>.</p>
     </details>
     <div class="verify">
       <p><strong>Registre:</strong> o resultado dos três testes. Só então abra a resposta, que também mostra como conferir o emissor do certificado visto pela VM-A.</p>
@@ -4243,7 +4233,7 @@ $cert | Format-List Subject, Issuer, Thumbprint
 $ssl.Dispose()
 $tcp.Dispose()</code></pre>
       <p>No navegador, a mesma prova aparece no cadeado da barra de endereço: abra os detalhes do certificado e confira o emissor. Ele deve apontar para a CA do lab, não diretamente para a CA pública original do site.</p>
-      <p><strong>Verifique:</strong> o emissor do certificado observado pela VM-A é a CA instalada no passo 6.2.</p>
+      <p><strong>Verifique:</strong> o emissor do certificado observado pela VM-A é a CA do Azure Firewall Manager (<code>CN=Azure Firewall Manager CA</code>), que o firewall usa para assinar os certificados sob demanda, e não a CA pública do site. A VM-A confia nela por causa da CA instalada no passo 6.2.</p>
     </details>
   </article>
 
@@ -4275,17 +4265,17 @@ $tcp.Dispose()</code></pre>
         <li>Abra <span class="path">Virtual machines › vm-fwlab-a › Connect › Bastion</span> e entre com <code>labadmin</code> e a senha do Ex0.</li>
         <li>Abra <span class="path">Start › Windows PowerShell</span> e execute o comando abaixo. Ele faz uma requisição HTTP com o User-Agent que a assinatura <code>2032081</code> reconhece.</li>
       </ol>
-      <pre class="code" data-lang="powershell"><code>curl.exe -A "HaxerMen" http://www.microsoft.com</code></pre>
+      <pre class="code" data-lang="powershell"><code>curl.exe --connect-timeout 10 --max-time 20 -A "HaxerMen" http://www.microsoft.com</code></pre>
     </div>
     <details class="cli">
       <summary>Teste via Run Command</summary>
       <pre class="code" data-lang="bash"><code>az vm run-command invoke -g 'rg-fwlab' -n 'vm-fwlab-a' \
   --command-id RunPowerShellScript \
-  --scripts 'curl.exe -A "HaxerMen" http://www.microsoft.com' \
+  --scripts 'curl.exe --connect-timeout 10 --max-time 20 -A "HaxerMen" http://www.microsoft.com' \
   --query "value[0].message" -o tsv</code></pre>
     </details>
     <div class="verify">
-      <p><strong>Verifique:</strong> a conexão é bloqueada ou reiniciada, e os logs de IDPS mostram a assinatura <code>2032081</code>.</p>
+      <p><strong>Verifique:</strong> a conexão é bloqueada ou reiniciada (o <code>curl.exe</code> termina por timeout, graças ao <code>--max-time 20</code>), e os logs de IDPS mostram a assinatura <code>2032081</code>.</p>
       <p>A CA do TLS está no pai e o IDPS está na filha <code>pol-fwlab-ns</code>: o modo <span class="ui">Alert and Deny</span> da filha bloqueia mesmo com o pai sem IDPS, e a inspeção usa a CA herdada do pai.</p>
     </div>
   </article>
@@ -4332,7 +4322,7 @@ AZFWIdpsSignature
       <p class="no-cli">Use o Portal neste passo. As consultas KQL são embutidas no guia para cópia direta; o checkpoint C6 automatiza a checagem mínima.</p>
     </details>
     <div class="verify">
-      <p><strong>Como ler:</strong> em <code>ex6-tls-url-categoria</code>, procure <code>IsTlsInspected == true</code>, <code>TargetUrl</code> preenchido para <code>en.wikipedia.org/wiki/Firewall</code> ou <code>en.wikipedia.org/wiki/Proxy_server</code>, e <code>WebCategory</code> preenchida para a regra <code>deny-gambling</code>. Em <code>ex6-idps</code>, procure <code>SignatureId == 2032081</code>, ação de bloqueio e a origem <code>10.110.1.4</code>.</p>
+      <p><strong>Como ler:</strong> em <code>ex6-tls-url-categoria</code>, procure <code>IsTlsInspected == true</code>, <code>TargetUrl</code> preenchido para <code>en.wikipedia.org/wiki/Firewall</code> ou <code>en.wikipedia.org/wiki/Proxy_server</code>, e <code>WebCategory</code> preenchida para a regra <code>deny-gambling</code>. Em <code>ex6-idps</code>, procure <code>SignatureId == 2032081</code>, ação de bloqueio (<code>drop</code>) e a origem. Como a saída passa pelo firewall N-S com SNAT, a origem no log do IDPS aparece como o IP do firewall na VNet N-S (por exemplo <code>10.130.0.6</code>), e não como <code>10.110.1.4</code>.</p>
     </div>
   </article>
 

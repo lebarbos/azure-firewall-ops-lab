@@ -632,7 +632,7 @@ az feature unregister --namespace {{c.diagnostics.flowTrace.namespace}} --name {
     <h3>Checkpoint C2</h3>
     <p>Execute o checkpoint somente depois de restaurar o estado final do exercício.</p>
     <pre class="code" data-lang="bash"><code>./scripts/checkpoint.sh C2</code></pre>
-    <p>O C2 exige <code>{{c.rcg.wlB.name}}</code> de volta em prioridade <code>{{c.rcg.wlB.priority}}</code>, <code>{{c.rc.netWlBTemp.name}}</code> e <code>{{c.rc.appWlBDeny.name}}</code> removidas, hits em <code>{{c.rules.denyLearn}}</code>, em <code>{{c.rules.allowLearn}}</code> e em <code>{{c.rules.allowHttpsAny}}</code>.</p>
+    <p>O C2 exige <code>{{c.rcg.wlB.name}}</code> de volta em prioridade <code>{{c.rcg.wlB.priority}}</code> e as collections temporárias <code>{{c.rc.netWlBTemp.name}}</code> e <code>{{c.rc.appWlBDeny.name}}</code> removidas. Ele confere só o estado final da policy, para que o Ex3 comece limpo.</p>
   </div>
 
   <div class="callout note">
