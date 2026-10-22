@@ -17,6 +17,13 @@ Laboratório prático, em português, para quem **opera** o Azure Firewall no di
 | Ex5 | Alertas de métrica com Action Group |
 | Ex6 | *(opcional)* TLS inspection, filtragem de URL, web categories e IDPS |
 
+## Apresentação
+
+A apresentação que acompanha o laboratório cobre a teoria por trás dos exercícios: onde o firewall entra (hub-spoke e Virtual WAN), a **ordem de processamento das regras** (tipo, grupo e collection, com e sem herança pai/filha), logs, métricas e troubleshooting.
+
+- Arquivo: [`apresentacao/azure-firewall.pptx`](apresentacao/azure-firewall.pptx) (PowerPoint, 44 slides, em português).
+- Use-a antes dos exercícios ou como consulta. O último slide (*Laboratório prático*) aponta para o guia deste repositório.
+
 ## Arquitetura (resumo)
 
 - **Secured Virtual WAN hub** com um Azure Firewall Premium que inspeciona o tráfego **leste-oeste** entre as spokes (Routing Intent apenas para tráfego privado).
@@ -54,6 +61,7 @@ O guia traz o diagrama completo, a tabela de rotas efetivas e a ordem de process
 | `queries/` | Consultas KQL usadas nos exercícios |
 | `guide/` | Fonte do guia (partials HTML + `build.py`) |
 | `docs/` | Guia gerado (`index.html`), publicado no GitHub Pages |
+| `apresentacao/` | Apresentação do workshop (`azure-firewall.pptx`) |
 | `tests/` | Testes do guia, do contrato e dos scripts (com `az` simulado, sem acessar o Azure) |
 
 ## Licença

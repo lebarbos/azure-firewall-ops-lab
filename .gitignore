@@ -12,10 +12,11 @@ infra/modules/*.json
 # Material fora da distribuição do aluno
 /INSTRUCTOR.md
 /demo/
-/apresentacao/
+/apresentacao/*
 snapshots/
 /Ajustes.md
 *.pptx
+!/apresentacao/azure-firewall.pptx
 *.pdf
 
 # Lista de padrões de neutralidade: vive FORA do repo (~/.config/fwlab/neutral-patterns.txt)
